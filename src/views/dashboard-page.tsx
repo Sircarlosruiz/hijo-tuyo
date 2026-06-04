@@ -1,109 +1,98 @@
 import { useState } from 'react';
 import { RequireAuth } from '../components/require-auth';
 import { withAuthProvider } from '../components/auth-provider-wrapper';
-import { LeaderboardChart } from '../components/leaderboard-chart';
+import { AppShell } from '../components/app-shell';
 import { GameFilter } from '../components/game-filter';
 import { ActivityFeed } from '../components/activity-feed';
-import { NavProfileLink } from '../components/nav-profile-link';
 import { RivalryModal } from '../components/rivalry-modal';
+import { Podium, StandingsTable } from '../components/podium-standings';
+import { Icon } from '../components/ui';
 import { useDashboardData, useRecentActivity } from '../hooks/use-dashboard-data';
+import { useAuth } from '../hooks/use-auth';
 import type { PlayerStats } from '../types/dashboard';
 
-function DashboardPageContent(): React.JSX.Element {
-  return (
-    <RequireAuth>
-      <DashboardContent />
-    </RequireAuth>
-  );
-}
-
 function DashboardContent(): React.JSX.Element {
+  const { user } = useAuth();
   const { playerStats, loading, error, games, filterByGame } = useDashboardData();
   const { activities, loading: activityLoading } = useRecentActivity(10);
   const [selectedGameId, setSelectedGameId] = useState<string | null>(null);
-  const [selectedOpponent, setSelectedOpponent] = useState<{ uid: string; name: string } | null>(null);
+  const [opponent, setOpponent] = useState<{ uid: string; name: string } | null>(null);
 
   const filteredStats = selectedGameId ? filterByGame(selectedGameId) : playerStats;
 
   const handlePlayerClick = (player: PlayerStats): void => {
-    setSelectedOpponent({ uid: player.uid, name: player.displayName });
-  };
-
-  const handleCloseModal = (): void => {
-    setSelectedOpponent(null);
+    setOpponent({ uid: player.uid, name: player.displayName });
   };
 
   if (loading) {
     return (
-      <div
-        style={{
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          minHeight: '100vh',
-        }}
-      >
-        <h1>Dashboard</h1>
-        <p>Loading stats...</p>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingTop: 40 }}>
+        <div className="ht-eyebrow">Loading standings…</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 24 }}>
+          {[1, 2, 3].map((n) => (
+            <div key={n} className="ht-card" style={{ height: 60, opacity: 0.4, animation: 'none' }} />
+          ))}
+        </div>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div
-        style={{
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          minHeight: '100vh',
-          color: '#d32f2f',
-        }}
-      >
-        <h1>Dashboard</h1>
-        <p>Failed to load stats: {error}</p>
+      <div className="ht-card ht-card-pad" style={{ color: 'var(--loss)', marginTop: 40 }}>
+        <strong>Failed to load standings:</strong> {error}
       </div>
     );
   }
 
+  const top3 = filteredStats.slice(0, 3);
+
   return (
-    <div
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        minHeight: '100vh',
-        padding: '2rem',
-      }}
-    >
-      <div style={{ width: '100%', maxWidth: '600px', display: 'flex', justifyContent: 'flex-end', marginBottom: '1rem' }}>
-        <NavProfileLink />
+    <>
+      <div className="ht-row ht-between" style={{ marginBottom: 22, alignItems: 'flex-end', gap: 16 }}>
+        <div>
+          <div className="ht-eyebrow">Who are you beating today?</div>
+          <h1 className="ht-page-title">Standings</h1>
+        </div>
+        <a
+          href="/match-entry"
+          className="ht-btn ht-btn-primary ht-nowrap"
+          style={{ padding: '12px 18px', fontSize: 14, textDecoration: 'none' }}
+        >
+          <Icon name="plus" style={{ width: 17, height: 17 }} />
+          Log Match
+        </a>
       </div>
 
-      <h1>Dashboard</h1>
+      <GameFilter games={games} selectedGameId={selectedGameId} onChange={setSelectedGameId} />
 
-      <GameFilter
-        games={games}
-        selectedGameId={selectedGameId}
-        onChange={setSelectedGameId}
-      />
+      {top3.length >= 2 && (
+        <Podium top={top3} currentUid={user?.uid ?? ''} onPlayer={handlePlayerClick} />
+      )}
 
-      <h2>Overall Leaderboard</h2>
-      <LeaderboardChart data={filteredStats} onRowClick={handlePlayerClick} />
+      <StandingsTable rows={filteredStats} currentUid={user?.uid ?? ''} onPlayer={handlePlayerClick} />
 
       <ActivityFeed activities={activities} loading={activityLoading} />
 
-      {selectedOpponent && (
+      {opponent && (
         <RivalryModal
-          isOpen={!!selectedOpponent}
-          opponentUid={selectedOpponent.uid}
-          opponentName={selectedOpponent.name}
-          onClose={handleCloseModal}
+          isOpen={!!opponent}
+          opponentUid={opponent.uid}
+          opponentName={opponent.name}
+          onClose={() => setOpponent(null)}
         />
       )}
-    </div>
+    </>
+  );
+}
+
+function DashboardPageContent(): React.JSX.Element {
+  return (
+    <RequireAuth>
+      <AppShell activePage="dashboard">
+        <DashboardContent />
+      </AppShell>
+    </RequireAuth>
   );
 }
 

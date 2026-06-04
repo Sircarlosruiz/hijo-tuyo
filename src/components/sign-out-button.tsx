@@ -1,34 +1,28 @@
-import { useState, useCallback } from "react";
-import { signOut as firebaseSignOut } from "firebase/auth";
-import { getAuthInstance } from "../lib/firebase-client";
-import { AuthError } from "../types/auth";
+import { useState, useCallback } from 'react';
+import { signOut as firebaseSignOut } from 'firebase/auth';
+import { getAuthInstance } from '../lib/firebase-client';
+import { Icon } from './ui';
 
 interface SignOutButtonProps {
   onSignOut?: () => void;
 }
 
-export function SignOutButton({
-  onSignOut,
-}: SignOutButtonProps): React.JSX.Element {
-  const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [error, setError] = useState<string>("");
+export function SignOutButton({ onSignOut }: SignOutButtonProps): React.JSX.Element {
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
 
-  const handleSignOut = useCallback(async (): Promise<void> => {
+  const handleSignOut = useCallback(async () => {
     setIsLoading(true);
-    setError("");
-
+    setError('');
     try {
       const auth = await getAuthInstance();
       await firebaseSignOut(auth);
-      window.location.href = "/";
       onSignOut?.();
+      window.location.href = '/';
     } catch (err) {
-      const message =
-        err instanceof Error
-          ? err.message
-          : "Sign-out failed. Please try again.";
+      const message = err instanceof Error ? err.message : 'Sign-out failed. Please try again.';
       setError(message);
-      console.error("Sign-out failed", { error: message });
+      console.error('Sign-out failed', { error: message });
     } finally {
       setIsLoading(false);
     }
@@ -40,19 +34,14 @@ export function SignOutButton({
         type="button"
         onClick={handleSignOut}
         disabled={isLoading}
-        style={{
-          padding: "8px 16px",
-          fontSize: "14px",
-          cursor: isLoading ? "not-allowed" : "pointer",
-          backgroundColor: isLoading ? "#ccc" : "#d32f2f",
-          color: "#fff",
-          border: "none",
-          borderRadius: "4px",
-        }}
+        className="ht-btn ht-btn-ghost ht-btn-block"
       >
-        {isLoading ? "Signing out..." : "Sign out"}
+        <Icon name="signout" style={{ width: 18, height: 18 }} />
+        {isLoading ? 'Signing out…' : 'Sign out'}
       </button>
-      {error && <p style={{ color: "#d32f2f", marginTop: "8px" }}>{error}</p>}
+      {error && (
+        <p style={{ color: 'var(--loss)', fontSize: 13, marginTop: 8 }}>{error}</p>
+      )}
     </div>
   );
 }

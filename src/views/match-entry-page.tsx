@@ -1,422 +1,296 @@
-import { useState, useEffect, useCallback, type FormEvent, type ChangeEvent } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { collection, getDocs, addDoc, serverTimestamp, type QueryDocumentSnapshot, type DocumentData } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
 import { RequireAuth } from '../components/require-auth';
 import { withAuthProvider } from '../components/auth-provider-wrapper';
-import { NavProfileLink } from '../components/nav-profile-link';
+import { AppShell } from '../components/app-shell';
+import { AddGameModal } from '../components/add-game-modal';
+import { Avatar, Icon } from '../components/ui';
 import { getFirestoreInstance } from '../lib/firebase-client';
 import type { Game, Player, MatchFormState, MatchFormErrors } from '../types/match';
 import { INITIAL_FORM_STATE } from '../types/match';
-import { AddGameModal } from '../components/add-game-modal';
 
 type SubmitStatus = 'idle' | 'success' | 'error';
 
-function MatchEntryPageContent(): React.JSX.Element {
+/* ---- Player chip picker ---- */
+interface PlayerPickerProps {
+  label: string;
+  players: Player[];
+  value: string;
+  onChange: (uid: string) => void;
+  disabledUid: string;
+}
+
+function PlayerPicker({ label, players, value, onChange, disabledUid }: PlayerPickerProps): React.JSX.Element {
+  return (
+    <div className="ht-field">
+      <div className="ht-label">{label}</div>
+      <div className="ht-chiprow">
+        {players.map((p) => {
+          const active = value === p.id;
+          const dim = disabledUid === p.id;
+          return (
+            <button
+              key={p.id}
+              type="button"
+              disabled={dim}
+              onClick={() => onChange(p.id)}
+              style={{
+                flexShrink: 0, display: 'flex', alignItems: 'center', gap: 9,
+                padding: '7px 13px 7px 7px', borderRadius: 99,
+                background: active ? 'color-mix(in srgb, var(--accent) 18%, var(--bg-2))' : 'var(--bg-2)',
+                border: `1px solid ${active ? 'var(--accent)' : 'var(--line)'}`,
+                color: active ? '#fff' : 'var(--text-dim)',
+                opacity: dim ? 0.32 : 1,
+                cursor: dim ? 'not-allowed' : 'pointer',
+                transition: 'all .14s', whiteSpace: 'nowrap',
+              }}
+            >
+              <Avatar uid={p.id} displayName={p.displayName} size={28} ring={active} />
+              <span style={{ fontWeight: 600, fontSize: 13.5 }}>{p.displayName}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* ---- Score stepper ---- */
+interface ScoreStepperProps {
+  player: Player | null;
+  value: string;
+  onChange: (val: string) => void;
+}
+
+function ScoreStepper({ player, value, onChange }: ScoreStepperProps): React.JSX.Element {
+  const num = parseInt(value, 10) || 0;
+  return (
+    <div style={{ flex: 1 }}>
+      <div className="ht-row ht-gap8" style={{ marginBottom: 9, alignItems: 'center' }}>
+        {player
+          ? <Avatar uid={player.id} displayName={player.displayName} size={22} />
+          : <div style={{ width: 22, height: 22, borderRadius: '50%', background: 'var(--bg-3)' }} />
+        }
+        <span className="ht-label" style={{ margin: 0 }}>{player?.displayName ?? '—'}</span>
+      </div>
+      <div className="ht-stepper">
+        <button type="button" onClick={() => onChange(String(Math.max(0, num - 1)))} aria-label="minus">–</button>
+        <span className="ht-num">{num}</span>
+        <button type="button" onClick={() => onChange(String(num + 1))} aria-label="plus">+</button>
+      </div>
+    </div>
+  );
+}
+
+/* ---- Main page ---- */
+function MatchEntryContent(): React.JSX.Element {
   const db = getFirestoreInstance();
 
   const [games, setGames] = useState<Game[]>([]);
   const [players, setPlayers] = useState<Player[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
+  const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
 
   const [form, setForm] = useState<MatchFormState>(INITIAL_FORM_STATE);
   const [errors, setErrors] = useState<MatchFormErrors>({});
-
-  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitStatus, setSubmitStatus] = useState<SubmitStatus>('idle');
   const [submitError, setSubmitError] = useState<string | null>(null);
-
-  const [isAddGameOpen, setIsAddGameOpen] = useState<boolean>(false);
-  const [addGameError, setAddGameError] = useState<string | null>(null);
+  const [isAddGameOpen, setIsAddGameOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
-
-    async function fetchData(): Promise<void> {
+    void (async () => {
       try {
         const [gamesSnap, playersSnap] = await Promise.all([
           getDocs(collection(db, 'juegos')),
           getDocs(collection(db, 'usuarios')),
         ]);
-
         if (cancelled) return;
-
-        const mappedGames: Game[] = gamesSnap.docs.map(
-          (doc: QueryDocumentSnapshot<DocumentData>) => ({
-            id: doc.id,
-            name: (doc.data().name as string) ?? 'Unknown Game',
-            category: (doc.data().category as string) ?? '',
-            ref: doc.ref,
-          })
-        );
-
-        const mappedPlayers: Player[] = playersSnap.docs.map(
-          (doc: QueryDocumentSnapshot<DocumentData>) => ({
-            id: doc.id,
-            displayName: (doc.data().name as string) ?? 'Unknown Player',
-            ref: doc.ref,
-          })
-        );
-
-        setGames(mappedGames);
-        setPlayers(mappedPlayers);
-        setFetchError(null);
-      } catch (err: unknown) {
-        if (cancelled) return;
-        const message = err instanceof Error ? err.message : 'Failed to load data';
-        setFetchError(message);
-        console.error('Failed to fetch match entry data', { error: err });
+        setGames(gamesSnap.docs.map((doc: QueryDocumentSnapshot<DocumentData>) => ({
+          id: doc.id, name: (doc.data().name as string) ?? 'Unknown', category: (doc.data().category as string) ?? '', ref: doc.ref,
+        })));
+        setPlayers(playersSnap.docs.map((doc: QueryDocumentSnapshot<DocumentData>) => ({
+          id: doc.id, displayName: (doc.data().name as string) ?? 'Unknown', ref: doc.ref,
+        })));
+      } catch (err) {
+        if (!cancelled) setFetchError(err instanceof Error ? err.message : 'Failed to load data');
       } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
+        if (!cancelled) setLoading(false);
       }
-    }
-
-    void fetchData();
-
-    return () => {
-      cancelled = true;
-    };
+    })();
+    return () => { cancelled = true; };
   }, [db]);
 
-  const validatePlayers = useCallback((player1Uid: string, player2Uid: string): string | undefined => {
-    if (player1Uid && player2Uid && player1Uid === player2Uid) {
-      return 'Players must be different';
-    }
-    return undefined;
+  const p1obj = players.find((p) => p.id === form.player1Uid) ?? null;
+  const p2obj = players.find((p) => p.id === form.player2Uid) ?? null;
+  const s1 = parseInt(form.score1, 10) || 0;
+  const s2 = parseInt(form.score2, 10) || 0;
+  const drawn = s1 === s2;
+  const winner = !drawn ? (s1 > s2 ? p1obj : p2obj) : null;
+
+  const setField = useCallback((field: keyof MatchFormState, val: string) => {
+    setForm((prev) => ({ ...prev, [field]: val }));
+    setErrors((prev) => { const n = { ...prev }; delete n[field as keyof MatchFormErrors]; delete n.general; return n; });
   }, []);
 
-  const validateScores = useCallback((score1: string, score2: string): { score1?: string; score2?: string; general?: string } => {
-    const result: { score1?: string; score2?: string; general?: string } = {};
-
-    if (score1 && score2) {
-      const s1 = Number(score1);
-      const s2 = Number(score2);
-      if (s1 === s2) {
-        result.general = 'No draws allowed';
-      }
-    }
-
-    return result;
-  }, []);
-
-  const handleFieldChange = useCallback(
-    (field: keyof MatchFormState, value: string): void => {
-      setForm((prev: MatchFormState) => ({ ...prev, [field]: value }));
-
-      setErrors((prev: MatchFormErrors) => {
-        const next = { ...prev };
-
-        if (field === 'player1Uid' || field === 'player2Uid') {
-          const p1 = field === 'player1Uid' ? value : form.player1Uid;
-          const p2 = field === 'player2Uid' ? value : form.player2Uid;
-          next.player1Uid = validatePlayers(p1, p2);
-          next.player2Uid = undefined;
-        }
-
-        if (field === 'score1' || field === 'score2') {
-          const s1 = field === 'score1' ? value : form.score1;
-          const s2 = field === 'score2' ? value : form.score2;
-          const scoreErrors = validateScores(s1, s2);
-          next.score1 = scoreErrors.score1;
-          next.score2 = scoreErrors.score2;
-          next.general = scoreErrors.general;
-        }
-
-        if (next[field as keyof MatchFormErrors] === undefined) {
-          delete next[field as keyof MatchFormErrors];
-        }
-
-        return next;
-      });
-    },
-    [form.player1Uid, form.player2Uid, form.score1, form.score2, validatePlayers, validateScores]
-  );
-
-  const validateAll = useCallback((): MatchFormErrors => {
+  const handleSubmit = useCallback(async (e: React.FormEvent) => {
+    e.preventDefault();
     const newErrors: MatchFormErrors = {};
+    if (!form.gameId)      newErrors.gameId     = 'Pick a game';
+    if (!form.player1Uid)  newErrors.player1Uid = 'Pick player 1';
+    if (!form.player2Uid)  newErrors.player2Uid = 'Pick player 2';
+    if (form.player1Uid && form.player2Uid && form.player1Uid === form.player2Uid)
+      newErrors.player1Uid = 'Pick two different players';
+    if (!drawn && s1 === s2) newErrors.general = 'No draws — scores must differ';
+    if (drawn) newErrors.general = 'No draws — scores must differ';
+    if (Object.keys(newErrors).length > 0) { setErrors(newErrors); return; }
 
-    if (!form.gameId) {
-      newErrors.gameId = 'Select a game';
+    const auth = getAuth();
+    if (!auth.currentUser) { setSubmitError('You must be signed in'); setSubmitStatus('error'); return; }
+
+    setIsSubmitting(true); setSubmitStatus('idle'); setSubmitError(null);
+    try {
+      await addDoc(collection(db, 'partidos'), {
+        gameId: form.gameId,
+        player1Uid: form.player1Uid, player2Uid: form.player2Uid,
+        score1: s1, score2: s2,
+        winnerUid: s1 > s2 ? form.player1Uid : form.player2Uid,
+        recordedByUid: auth.currentUser.uid,
+        createdAt: serverTimestamp(),
+      });
+      setSubmitStatus('success');
+      setForm(INITIAL_FORM_STATE);
+      setErrors({});
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : 'Failed to submit match');
+      setSubmitStatus('error');
+    } finally {
+      setIsSubmitting(false);
     }
-    if (!form.player1Uid) {
-      newErrors.player1Uid = 'Select player 1';
-    }
-    if (!form.player2Uid) {
-      newErrors.player2Uid = 'Select player 2';
-    }
-    if (!form.score1) {
-      newErrors.score1 = 'Enter score for player 1';
-    }
-    if (!form.score2) {
-      newErrors.score2 = 'Enter score for player 2';
-    }
+  }, [form, s1, s2, drawn, db]);
 
-    const playerError = validatePlayers(form.player1Uid, form.player2Uid);
-    if (playerError) {
-      newErrors.player1Uid = playerError;
-    }
-
-    const scoreErrors = validateScores(form.score1, form.score2);
-    if (scoreErrors.general) {
-      newErrors.general = scoreErrors.general;
-    }
-
-    return newErrors;
-  }, [form, validatePlayers, validateScores]);
-
-  const handleAddGameSubmit = useCallback(
-    async (gameName: string, gameCategory: string): Promise<void> => {
-      const auth = getAuth();
-      const currentUser = auth.currentUser;
-      if (!currentUser) {
-        throw new Error('You must be signed in to add a game');
-      }
-
-      const tempId = `temp-${Date.now()}`;
-      const newGame: Game = {
-        id: tempId,
-        name: gameName,
-        category: gameCategory,
-        ref: {} as Game['ref'],
-      };
-
-      setGames((prev: Game[]) => [...prev, newGame]);
-      setIsAddGameOpen(false);
-
-      try {
-        const docRef = await addDoc(collection(db, 'juegos'), {
-          name: gameName,
-          category: gameCategory,
-          createdBy: currentUser.uid,
-          createdAt: serverTimestamp(),
-        });
-
-        setGames((prev: Game[]) =>
-          prev.map((game: Game) =>
-            game.id === tempId
-              ? { ...game, id: docRef.id, ref: docRef }
-              : game
-          )
-        );
-
-        setForm((prev: MatchFormState) => ({ ...prev, gameId: docRef.id }));
-      } catch (err: unknown) {
-        setGames((prev: Game[]) => prev.filter((game: Game) => game.id !== tempId));
-        const message = err instanceof Error ? err.message : 'Failed to add game';
-        setAddGameError(message);
-        setIsAddGameOpen(true);
-        console.error('Failed to add game', { error: err, name: gameName, category: gameCategory });
-      }
-    },
-    [db]
-  );
-
-  const handleAddGameCancel = useCallback((): void => {
+  const handleAddGame = useCallback(async (name: string, category: string) => {
+    const auth = getAuth();
+    if (!auth.currentUser) throw new Error('Must be signed in');
+    const tempId = `temp-${Date.now()}`;
+    setGames((prev) => [...prev, { id: tempId, name, category, ref: {} as Game['ref'] }]);
     setIsAddGameOpen(false);
-    setAddGameError(null);
-  }, []);
-
-  const handleSubmit = useCallback(
-    async (e: FormEvent<HTMLFormElement>): Promise<void> => {
-      e.preventDefault();
-      setSubmitError(null);
-
-      const newErrors = validateAll();
-      if (Object.keys(newErrors).length > 0) {
-        setErrors(newErrors);
-        return;
-      }
-
-      const auth = getAuth();
-      const currentUser = auth.currentUser;
-      if (!currentUser) {
-        setSubmitError('You must be signed in to submit a match');
-        setSubmitStatus('error');
-        return;
-      }
-
-      const winnerUid = Number(form.score1) > Number(form.score2) ? form.player1Uid : form.player2Uid;
-
-      setIsSubmitting(true);
-      setSubmitStatus('idle');
-
-      try {
-        await addDoc(collection(db, 'partidos'), {
-          gameId: form.gameId,
-          player1Uid: form.player1Uid,
-          player2Uid: form.player2Uid,
-          score1: Number(form.score1),
-          score2: Number(form.score2),
-          winnerUid,
-          recordedByUid: currentUser.uid,
-          createdAt: serverTimestamp(),
-        });
-
-        setSubmitStatus('success');
-        setForm(INITIAL_FORM_STATE);
-        setErrors({});
-      } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : 'Failed to submit match';
-        setSubmitError(message);
-        setSubmitStatus('error');
-        console.error('Failed to submit match', { error: err, form });
-      } finally {
-        setIsSubmitting(false);
-      }
-    },
-    [validateAll, form, db]
-  );
+    try {
+      const docRef = await addDoc(collection(db, 'juegos'), { name, category, createdBy: auth.currentUser!.uid, createdAt: serverTimestamp() });
+      setGames((prev) => prev.map((g) => g.id === tempId ? { ...g, id: docRef.id, ref: docRef } : g));
+      setField('gameId', docRef.id);
+    } catch {
+      setGames((prev) => prev.filter((g) => g.id !== tempId));
+      setIsAddGameOpen(true);
+    }
+  }, [db, setField]);
 
   if (loading) {
-    return <div>Loading match entry form...</div>;
+    return <div className="ht-eyebrow" style={{ paddingTop: 40 }}>Loading…</div>;
   }
-
   if (fetchError) {
-    return <div>Error: {fetchError}</div>;
+    return <div style={{ color: 'var(--loss)', paddingTop: 40 }}>Error: {fetchError}</div>;
   }
 
   return (
-    <div style={{ maxWidth: '480px', margin: '0 auto', padding: '2rem' }}>
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '1rem' }}>
-        <NavProfileLink />
+    <div>
+      <div style={{ marginBottom: 22 }}>
+        <div className="ht-eyebrow">No draws. Somebody has to lose.</div>
+        <h1 className="ht-page-title">Log a Match</h1>
       </div>
 
-      <h1>Match Entry</h1>
-
       {submitStatus === 'success' && (
-        <div style={{ padding: '0.75rem', marginBottom: '1rem', backgroundColor: '#d4edda', color: '#155724', borderRadius: '4px' }}>
-          Match submitted successfully!
+        <div className="ht-badge ht-badge-win" style={{ marginBottom: 18, padding: '10px 16px', borderRadius: 'var(--r)', fontSize: 14 }}>
+          <Icon name="check" style={{ width: 16, height: 16 }} />
+          Match logged. The record stands.
         </div>
       )}
 
-      {submitStatus === 'error' && submitError && (
-        <div style={{ padding: '0.75rem', marginBottom: '1rem', backgroundColor: '#f8d7da', color: '#721c24', borderRadius: '4px' }}>
-          {submitError}
-        </div>
-      )}
+      <form className="ht-card ht-card-pad" onSubmit={handleSubmit} noValidate>
 
-      <form onSubmit={handleSubmit} noValidate>
-        <div style={{ marginBottom: '1rem' }}>
-          <label htmlFor="game-select">Game</label>
-          <select
-            id="game-select"
-            value={form.gameId}
-            onChange={(e: ChangeEvent<HTMLSelectElement>) => handleFieldChange('gameId', e.target.value)}
-            disabled={isSubmitting}
-            style={{ width: '100%', padding: '0.5rem' }}
-          >
-            <option value="">Select a game</option>
-            {games.map((game: Game) => (
-              <option key={game.id} value={game.id}>
-                {game.name}
-              </option>
-            ))}
-          </select>
-          {errors.gameId && <p style={{ color: 'red', margin: '0.25rem 0 0' }}>{errors.gameId}</p>}
-          <button
-            type="button"
-            onClick={() => setIsAddGameOpen(true)}
-            disabled={isSubmitting}
-            className="mt-2 text-sm text-blue-600 hover:text-blue-700 hover:underline disabled:opacity-60"
-          >
-            ＋ Add Game
-          </button>
-        </div>
-
-        <div style={{ marginBottom: '1rem' }}>
-          <label htmlFor="player1-select">Player 1</label>
-          <select
-            id="player1-select"
-            value={form.player1Uid}
-            onChange={(e: ChangeEvent<HTMLSelectElement>) => handleFieldChange('player1Uid', e.target.value)}
-            disabled={isSubmitting}
-            style={{ width: '100%', padding: '0.5rem' }}
-          >
-            <option value="">Select player 1</option>
-            {players.map((player: Player) => (
-              <option key={player.id} value={player.id}>
-                {player.displayName}
-              </option>
-            ))}
-          </select>
-          {errors.player1Uid && <p style={{ color: 'red', margin: '0.25rem 0 0' }}>{errors.player1Uid}</p>}
-        </div>
-
-        <div style={{ marginBottom: '1rem' }}>
-          <label htmlFor="player2-select">Player 2</label>
-          <select
-            id="player2-select"
-            value={form.player2Uid}
-            onChange={(e: ChangeEvent<HTMLSelectElement>) => handleFieldChange('player2Uid', e.target.value)}
-            disabled={isSubmitting}
-            style={{ width: '100%', padding: '0.5rem' }}
-          >
-            <option value="">Select player 2</option>
-            {players.map((player: Player) => (
-              <option key={player.id} value={player.id}>
-                {player.displayName}
-              </option>
-            ))}
-          </select>
-          {errors.player2Uid && <p style={{ color: 'red', margin: '0.25rem 0 0' }}>{errors.player2Uid}</p>}
-        </div>
-
-        <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem' }}>
-          <div style={{ flex: 1 }}>
-            <label htmlFor="score1-input">Score 1</label>
-            <input
-              id="score1-input"
-              type="number"
-              min="0"
-              step="1"
-              value={form.score1}
-              onChange={(e: ChangeEvent<HTMLInputElement>) => handleFieldChange('score1', e.target.value)}
-              disabled={isSubmitting}
-              style={{ width: '100%', padding: '0.5rem' }}
-            />
-            {errors.score1 && <p style={{ color: 'red', margin: '0.25rem 0 0' }}>{errors.score1}</p>}
+        {/* game */}
+        <div className="ht-field">
+          <div className="ht-row ht-between" style={{ marginBottom: 9 }}>
+            <span className="ht-label" style={{ margin: 0 }}>Game</span>
+            <button
+              type="button" onClick={() => setIsAddGameOpen(true)}
+              style={{ background: 'none', border: 'none', color: 'var(--accent)', fontWeight: 700, fontSize: 12.5, display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}
+            >
+              <Icon name="plus" style={{ width: 14, height: 14 }} />Add game
+            </button>
           </div>
+          <div className="ht-chiprow">
+            {games.map((g) => (
+              <button
+                key={g.id} type="button"
+                className={`ht-chip${form.gameId === g.id ? ' active' : ''}`}
+                onClick={() => setField('gameId', g.id)}
+              >
+                {g.name}
+              </button>
+            ))}
+          </div>
+          {errors.gameId && <p className="ht-field-err">{errors.gameId}</p>}
+        </div>
 
-          <div style={{ flex: 1 }}>
-            <label htmlFor="score2-input">Score 2</label>
-            <input
-              id="score2-input"
-              type="number"
-              min="0"
-              step="1"
-              value={form.score2}
-              onChange={(e: ChangeEvent<HTMLInputElement>) => handleFieldChange('score2', e.target.value)}
-              disabled={isSubmitting}
-              style={{ width: '100%', padding: '0.5rem' }}
-            />
-            {errors.score2 && <p style={{ color: 'red', margin: '0.25rem 0 0' }}>{errors.score2}</p>}
+        <PlayerPicker label="Player 1" players={players} value={form.player1Uid} onChange={(v) => setField('player1Uid', v)} disabledUid={form.player2Uid} />
+        {errors.player1Uid && <p className="ht-field-err" style={{ marginTop: -12, marginBottom: 12 }}>{errors.player1Uid}</p>}
+
+        <PlayerPicker label="Player 2" players={players} value={form.player2Uid} onChange={(v) => setField('player2Uid', v)} disabledUid={form.player1Uid} />
+        {errors.player2Uid && <p className="ht-field-err" style={{ marginTop: -12, marginBottom: 12 }}>{errors.player2Uid}</p>}
+
+        {/* scores */}
+        <div className="ht-field">
+          <div className="ht-label">Score</div>
+          <div className="ht-row ht-gap16">
+            <ScoreStepper player={p1obj} value={form.score1} onChange={(v) => setField('score1', v)} />
+            <ScoreStepper player={p2obj} value={form.score2} onChange={(v) => setField('score2', v)} />
           </div>
         </div>
 
-        {errors.general && <p style={{ color: 'red', margin: '0.5rem 0' }}>{errors.general}</p>}
+        {/* winner preview */}
+        <div style={{
+          borderRadius: 'var(--r)', padding: '13px 16px', marginBottom: 16,
+          background: winner ? 'color-mix(in srgb, var(--win) 12%, var(--bg-2))' : 'var(--bg-2)',
+          border: `1px solid ${winner ? 'color-mix(in srgb, var(--win) 40%, transparent)' : 'var(--line)'}`,
+          display: 'flex', alignItems: 'center', gap: 11, minHeight: 52,
+        }}>
+          {winner ? (
+            <>
+              <Icon name="standings" style={{ width: 18, height: 18, color: 'var(--win)' }} />
+              <span className="ht-label" style={{ margin: 0 }}>Winner</span>
+              <Avatar uid={winner.id} displayName={winner.displayName} size={26} />
+              <strong style={{ color: 'var(--win)', fontSize: 15 }}>{winner.displayName}</strong>
+            </>
+          ) : (
+            <span className="ht-muted" style={{ fontSize: 13.5 }}>
+              {drawn && s1 > 0 ? 'No draws — scores must differ' : 'Set the score — winner decided automatically'}
+            </span>
+          )}
+        </div>
 
-        <button
-          type="submit"
-          disabled={isSubmitting}
-          style={{
-            padding: '0.75rem 1.5rem',
-            width: '100%',
-            opacity: isSubmitting ? 0.6 : 1,
-            cursor: isSubmitting ? 'not-allowed' : 'pointer',
-          }}
-        >
-          {isSubmitting ? 'Submitting...' : 'Submit Match'}
+        {errors.general && <p className="ht-field-err" style={{ marginBottom: 12 }}>{errors.general}</p>}
+        {submitStatus === 'error' && submitError && <p className="ht-field-err" style={{ marginBottom: 12 }}>{submitError}</p>}
+
+        <button type="submit" className="ht-btn ht-btn-primary ht-btn-block" disabled={isSubmitting}>
+          {isSubmitting ? 'Saving…' : 'Submit Match'}
         </button>
       </form>
 
-      <AddGameModal
-        isOpen={isAddGameOpen}
-        onSubmit={handleAddGameSubmit}
-        onCancel={handleAddGameCancel}
-      />
+      <AddGameModal isOpen={isAddGameOpen} onSubmit={handleAddGame} onCancel={() => setIsAddGameOpen(false)} />
     </div>
+  );
+}
+
+function MatchEntryPageContent(): React.JSX.Element {
+  return (
+    <RequireAuth>
+      <AppShell activePage="log">
+        <MatchEntryContent />
+      </AppShell>
+    </RequireAuth>
   );
 }
 
