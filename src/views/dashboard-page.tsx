@@ -5,7 +5,9 @@ import { LeaderboardChart } from '../components/leaderboard-chart';
 import { GameFilter } from '../components/game-filter';
 import { ActivityFeed } from '../components/activity-feed';
 import { NavProfileLink } from '../components/nav-profile-link';
+import { RivalryModal } from '../components/rivalry-modal';
 import { useDashboardData, useRecentActivity } from '../hooks/use-dashboard-data';
+import type { PlayerStats } from '../types/dashboard';
 
 function DashboardPageContent(): React.JSX.Element {
   return (
@@ -19,8 +21,17 @@ function DashboardContent(): React.JSX.Element {
   const { playerStats, loading, error, games, filterByGame } = useDashboardData();
   const { activities, loading: activityLoading } = useRecentActivity(10);
   const [selectedGameId, setSelectedGameId] = useState<string | null>(null);
+  const [selectedOpponent, setSelectedOpponent] = useState<{ uid: string; name: string } | null>(null);
 
   const filteredStats = selectedGameId ? filterByGame(selectedGameId) : playerStats;
+
+  const handlePlayerClick = (player: PlayerStats): void => {
+    setSelectedOpponent({ uid: player.uid, name: player.displayName });
+  };
+
+  const handleCloseModal = (): void => {
+    setSelectedOpponent(null);
+  };
 
   if (loading) {
     return (
@@ -80,9 +91,18 @@ function DashboardContent(): React.JSX.Element {
       />
 
       <h2>Overall Leaderboard</h2>
-      <LeaderboardChart data={filteredStats} />
+      <LeaderboardChart data={filteredStats} onRowClick={handlePlayerClick} />
 
       <ActivityFeed activities={activities} loading={activityLoading} />
+
+      {selectedOpponent && (
+        <RivalryModal
+          isOpen={!!selectedOpponent}
+          opponentUid={selectedOpponent.uid}
+          opponentName={selectedOpponent.name}
+          onClose={handleCloseModal}
+        />
+      )}
     </div>
   );
 }

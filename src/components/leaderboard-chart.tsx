@@ -1,3 +1,4 @@
+import { useCallback } from 'react';
 import {
   BarChart,
   Bar,
@@ -11,9 +12,22 @@ import type { PlayerStats } from '../types/dashboard';
 
 interface LeaderboardChartProps {
   data: PlayerStats[];
+  onRowClick?: (player: PlayerStats) => void;
 }
 
-export function LeaderboardChart({ data }: LeaderboardChartProps): React.JSX.Element {
+export function LeaderboardChart({ data, onRowClick }: LeaderboardChartProps): React.JSX.Element {
+  const handleBarClick = useCallback(
+    (data: unknown): void => {
+      if (onRowClick && data && typeof data === 'object' && 'uid' in data) {
+        const player = data as PlayerStats;
+        onRowClick(player);
+      }
+    },
+    [onRowClick],
+  );
+
+  const cursorStyle = onRowClick ? 'pointer' : 'default';
+
   if (data.length === 0) {
     return (
       <div
@@ -52,7 +66,13 @@ export function LeaderboardChart({ data }: LeaderboardChartProps): React.JSX.Ele
             formatter={(value: number): string => `${value} wins`}
             labelFormatter={(label: string): string => `Player: ${label}`}
           />
-          <Bar dataKey="wins" fill="#8884d8" name="Wins" />
+          <Bar
+            dataKey="wins"
+            fill="#8884d8"
+            name="Wins"
+            onClick={handleBarClick}
+            style={{ cursor: cursorStyle }}
+          />
         </BarChart>
       </ResponsiveContainer>
     </div>
