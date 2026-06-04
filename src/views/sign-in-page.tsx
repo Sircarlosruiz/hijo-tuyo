@@ -3,7 +3,7 @@ import { useAuth } from "../hooks/use-auth";
 import { SignInButton } from "../components/sign-in-button";
 import { SignOutButton } from "../components/sign-out-button";
 import { AuthLoading } from "../components/auth-loading";
-import { getStoredRedirectUrl } from "../components/require-auth";
+import { getStoredRedirectUrl } from "../lib/auth-redirect";
 import { withAuthProvider } from "../components/auth-provider-wrapper";
 
 function SignInPageContent(): React.JSX.Element {

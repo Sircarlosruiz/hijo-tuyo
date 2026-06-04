@@ -1,12 +1,11 @@
 import { useEffect } from "react";
 import { useAuth } from "../hooks/use-auth";
+import { storeRedirectUrl } from "../lib/auth-redirect";
 import { AuthLoading } from "./auth-loading";
 
 interface RequireAuthProps {
   children: React.ReactNode;
 }
-
-const REDIRECT_STORAGE_KEY = "auth_redirect_url";
 
 export function RequireAuth({ children }: RequireAuthProps): React.JSX.Element {
   const { user, loading } = useAuth();
@@ -14,7 +13,7 @@ export function RequireAuth({ children }: RequireAuthProps): React.JSX.Element {
   useEffect(() => {
     if (!loading && user === null) {
       const currentUrl = window.location.pathname + window.location.search;
-      sessionStorage.setItem(REDIRECT_STORAGE_KEY, currentUrl);
+      storeRedirectUrl(currentUrl);
       window.location.href = "/";
     }
   }, [loading, user]);
@@ -28,15 +27,4 @@ export function RequireAuth({ children }: RequireAuthProps): React.JSX.Element {
   }
 
   return <>{children}</>;
-}
-
-export function getStoredRedirectUrl(): string | null {
-  const url = sessionStorage.getItem(REDIRECT_STORAGE_KEY);
-  if (url) {
-    sessionStorage.removeItem(REDIRECT_STORAGE_KEY);
-    if (url.startsWith("/")) {
-      return url;
-    }
-  }
-  return null;
 }
