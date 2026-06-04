@@ -4,6 +4,7 @@ import { withAuthProvider } from '../components/auth-provider-wrapper';
 import { LeaderboardChart } from '../components/leaderboard-chart';
 import { GameFilter } from '../components/game-filter';
 import { ActivityFeed } from '../components/activity-feed';
+import { NavProfileLink } from '../components/nav-profile-link';
 import { useDashboardData, useRecentActivity } from '../hooks/use-dashboard-data';
 
 function DashboardPageContent(): React.JSX.Element {
@@ -66,6 +67,10 @@ function DashboardContent(): React.JSX.Element {
         padding: '2rem',
       }}
     >
+      <div style={{ width: '100%', maxWidth: '600px', display: 'flex', justifyContent: 'flex-end', marginBottom: '1rem' }}>
+        <NavProfileLink />
+      </div>
+
       <h1>Dashboard</h1>
 
       <GameFilter

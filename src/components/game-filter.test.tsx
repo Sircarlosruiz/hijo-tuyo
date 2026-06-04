@@ -5,8 +5,8 @@ import type { Game } from '../types/match';
 
 describe('GameFilter', () => {
   const mockGames: Game[] = [
-    { id: '1', name: 'FIFA', ref: {} as Game['ref'] },
-    { id: '2', name: 'NBA 2K', ref: {} as Game['ref'] },
+    { id: '1', name: 'FIFA', category: 'Sports', ref: {} as Game['ref'] },
+    { id: '2', name: 'NBA 2K', category: 'Sports', ref: {} as Game['ref'] },
   ];
 
   it('should render with "All Games" default option', () => {

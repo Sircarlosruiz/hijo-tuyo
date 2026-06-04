@@ -3,6 +3,7 @@ import type { DocumentReference } from 'firebase/firestore';
 export interface Game {
   id: string;
   name: string;
+  category: string;
   ref: DocumentReference;
 }
 

@@ -3,9 +3,11 @@ import { collection, getDocs, addDoc, serverTimestamp, type QueryDocumentSnapsho
 import { getAuth } from 'firebase/auth';
 import { RequireAuth } from '../components/require-auth';
 import { withAuthProvider } from '../components/auth-provider-wrapper';
+import { NavProfileLink } from '../components/nav-profile-link';
 import { getFirestoreInstance } from '../lib/firebase-client';
 import type { Game, Player, MatchFormState, MatchFormErrors } from '../types/match';
 import { INITIAL_FORM_STATE } from '../types/match';
+import { AddGameModal } from '../components/add-game-modal';
 
 type SubmitStatus = 'idle' | 'success' | 'error';
 
@@ -24,6 +26,9 @@ function MatchEntryPageContent(): React.JSX.Element {
   const [submitStatus, setSubmitStatus] = useState<SubmitStatus>('idle');
   const [submitError, setSubmitError] = useState<string | null>(null);
 
+  const [isAddGameOpen, setIsAddGameOpen] = useState<boolean>(false);
+  const [addGameError, setAddGameError] = useState<string | null>(null);
+
   useEffect(() => {
     let cancelled = false;
 
@@ -40,6 +45,7 @@ function MatchEntryPageContent(): React.JSX.Element {
           (doc: QueryDocumentSnapshot<DocumentData>) => ({
             id: doc.id,
             name: (doc.data().name as string) ?? 'Unknown Game',
+            category: (doc.data().category as string) ?? '',
             ref: doc.ref,
           })
         );
@@ -160,6 +166,58 @@ function MatchEntryPageContent(): React.JSX.Element {
     return newErrors;
   }, [form, validatePlayers, validateScores]);
 
+  const handleAddGameSubmit = useCallback(
+    async (gameName: string, gameCategory: string): Promise<void> => {
+      const auth = getAuth();
+      const currentUser = auth.currentUser;
+      if (!currentUser) {
+        throw new Error('You must be signed in to add a game');
+      }
+
+      const tempId = `temp-${Date.now()}`;
+      const newGame: Game = {
+        id: tempId,
+        name: gameName,
+        category: gameCategory,
+        ref: {} as Game['ref'],
+      };
+
+      setGames((prev: Game[]) => [...prev, newGame]);
+      setIsAddGameOpen(false);
+
+      try {
+        const docRef = await addDoc(collection(db, 'juegos'), {
+          name: gameName,
+          category: gameCategory,
+          createdBy: currentUser.uid,
+          createdAt: serverTimestamp(),
+        });
+
+        setGames((prev: Game[]) =>
+          prev.map((game: Game) =>
+            game.id === tempId
+              ? { ...game, id: docRef.id, ref: docRef }
+              : game
+          )
+        );
+
+        setForm((prev: MatchFormState) => ({ ...prev, gameId: docRef.id }));
+      } catch (err: unknown) {
+        setGames((prev: Game[]) => prev.filter((game: Game) => game.id !== tempId));
+        const message = err instanceof Error ? err.message : 'Failed to add game';
+        setAddGameError(message);
+        setIsAddGameOpen(true);
+        console.error('Failed to add game', { error: err, name: gameName, category: gameCategory });
+      }
+    },
+    [db]
+  );
+
+  const handleAddGameCancel = useCallback((): void => {
+    setIsAddGameOpen(false);
+    setAddGameError(null);
+  }, []);
+
   const handleSubmit = useCallback(
     async (e: FormEvent<HTMLFormElement>): Promise<void> => {
       e.preventDefault();
@@ -221,6 +279,10 @@ function MatchEntryPageContent(): React.JSX.Element {
 
   return (
     <div style={{ maxWidth: '480px', margin: '0 auto', padding: '2rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '1rem' }}>
+        <NavProfileLink />
+      </div>
+
       <h1>Match Entry</h1>
 
       {submitStatus === 'success' && (
@@ -253,6 +315,14 @@ function MatchEntryPageContent(): React.JSX.Element {
             ))}
           </select>
           {errors.gameId && <p style={{ color: 'red', margin: '0.25rem 0 0' }}>{errors.gameId}</p>}
+          <button
+            type="button"
+            onClick={() => setIsAddGameOpen(true)}
+            disabled={isSubmitting}
+            className="mt-2 text-sm text-blue-600 hover:text-blue-700 hover:underline disabled:opacity-60"
+          >
+            ＋ Add Game
+          </button>
         </div>
 
         <div style={{ marginBottom: '1rem' }}>
@@ -340,6 +410,12 @@ function MatchEntryPageContent(): React.JSX.Element {
           {isSubmitting ? 'Submitting...' : 'Submit Match'}
         </button>
       </form>
+
+      <AddGameModal
+        isOpen={isAddGameOpen}
+        onSubmit={handleAddGameSubmit}
+        onCancel={handleAddGameCancel}
+      />
     </div>
   );
 }

@@ -21,10 +21,12 @@ interface FirestorePartido {
 
 interface FirestoreUsuario {
   name: string | null;
+  nickname: string | null;
 }
 
 interface FirestoreJuego {
   name: string;
+  category: string;
 }
 
 function computePlayerStats(
@@ -56,9 +58,11 @@ function computePlayerStats(
 
   for (const [uid, { wins, losses }] of statsMap.entries()) {
     const total = wins + losses;
+    const userData = usuarios[uid];
+    const displayName = userData?.nickname ?? userData?.name ?? 'Unknown';
     stats.push({
       uid,
-      displayName: usuarios[uid]?.name ?? 'Unknown',
+      displayName,
       wins,
       losses,
       winRate: total > 0 ? wins / total : 0,
@@ -74,18 +78,23 @@ function mapMatchRecord(
   usuarios: Record<string, FirestoreUsuario>,
   juegos: Record<string, FirestoreJuego>,
 ): MatchRecord {
+  const getPlayerName = (uid: string): string => {
+    const user = usuarios[uid];
+    return user?.nickname ?? user?.name ?? 'Unknown';
+  };
+
   return {
     id: docId,
     gameId: partido.gameId,
     gameName: juegos[partido.gameId]?.name ?? 'Unknown',
     player1Uid: partido.player1Uid,
-    player1Name: usuarios[partido.player1Uid]?.name ?? 'Unknown',
+    player1Name: getPlayerName(partido.player1Uid),
     player2Uid: partido.player2Uid,
-    player2Name: usuarios[partido.player2Uid]?.name ?? 'Unknown',
+    player2Name: getPlayerName(partido.player2Uid),
     score1: partido.score1,
     score2: partido.score2,
     winnerUid: partido.winnerUid,
-    winnerName: usuarios[partido.winnerUid]?.name ?? 'Unknown',
+    winnerName: getPlayerName(partido.winnerUid),
     timestamp: partido.createdAt.toDate(),
   };
 }
@@ -121,9 +130,11 @@ export function useDashboardData(): DashboardData & {
 
       const juegosList: Game[] = [];
       juegosSnap.forEach((doc) => {
+        const data = doc.data() as FirestoreJuego;
         juegosList.push({
           id: doc.id,
-          name: (doc.data() as FirestoreJuego).name,
+          name: data.name,
+          category: data.category ?? '',
           ref: doc.ref,
         });
       });
