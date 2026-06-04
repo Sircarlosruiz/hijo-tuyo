@@ -98,6 +98,11 @@ export function Icon({ name, style, className }: IconProps): React.JSX.Element {
       <path fill="#EA4335" d="M12 5.9c1.5 0 2.8.5 3.8 1.5l2.8-2.8A10 10 0 0 0 3.1 7.5l3.3 2.6C7.2 7.6 9.4 5.9 12 5.9Z"/>
     </g>,
     signout: <><path {...p} d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline {...p} points="16 17 21 12 16 7" /><line {...p} x1="21" y1="12" x2="9" y2="12" /></>,
+    trophy: <><path {...p} d="M6 9H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h2M18 9h2a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2h-2" /><path {...p} d="M6 3h12v7a6 6 0 0 1-12 0V3Z" /><path {...p} d="M9 21h6M12 16v5" /></>,
+    bracket: <><path {...p} d="M8 4H4v16h4M16 4h4v16h-4" /><path {...p} d="M8 8h8M8 16h8" /><path {...p} d="M12 8v8" /></>,
+    eye: <><path {...p} d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z" /><circle {...p} cx="12" cy="12" r="3" /></>,
+    'eye-off': <><path {...p} d="M9.88 9.88a3 3 0 0 0 4.24 4.24" /><path {...p} d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 11 8 11 8a13.16 13.16 0 0 1-1.67 2.68" /><path {...p} d="M6.61 6.61A13.526 13.526 0 0 0 1 12s4 8 11 8a13.5 13.5 0 0 0 4.3-1.07" /><path {...p} d="m2 2 20 20" /></>,
+    'arrow-left': <><path {...p} d="M19 12H5" /><polyline {...p} points="12 19 5 12 12 5" /></>,
   };
 
   return (

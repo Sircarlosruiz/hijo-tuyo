@@ -4,12 +4,13 @@ import { Avatar, BrandMark, Icon } from './ui';
 
 interface AppShellProps {
   children: ReactNode;
-  activePage: 'dashboard' | 'log' | 'profile';
+  activePage: 'dashboard' | 'log' | 'tournaments' | 'profile';
 }
 
 const NAV = [
   { key: 'dashboard' as const, icon: 'standings', label: 'Standings', href: '/dashboard' },
   { key: 'log' as const,       icon: 'plus',      label: 'Log Match',  href: '/match-entry' },
+  { key: 'tournaments' as const, icon: 'trophy',  label: 'Tournaments', href: '/tournaments' },
   { key: 'profile' as const,   icon: 'user',      label: 'Profile',    href: '/profile' },
 ];
 
