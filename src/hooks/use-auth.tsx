@@ -1,8 +1,14 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
-import { type User, onAuthStateChanged } from 'firebase/auth';
-import { getAuthInstance } from '../lib/firebase-client';
-import { syncUserToFirestore } from '../lib/firestore-user-sync';
-import { type AuthContextValue } from '../types/auth';
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  type ReactNode,
+} from "react";
+import { type User, onAuthStateChanged } from "firebase/auth";
+import { getAuthInstance } from "../lib/firebase-client";
+import { syncUserToFirestore } from "../lib/firestore-user-sync";
+import { type AuthContextValue } from "../types/auth";
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
@@ -10,7 +16,9 @@ interface AuthProviderProps {
   children: ReactNode;
 }
 
-export function AuthProvider({ children }: AuthProviderProps): React.JSX.Element {
+export function AuthProvider({
+  children,
+}: AuthProviderProps): React.JSX.Element {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
 
@@ -30,7 +38,7 @@ export function AuthProvider({ children }: AuthProviderProps): React.JSX.Element
           setLoading(false);
         });
       } catch (error) {
-        console.error('Failed to initialize auth listener', {
+        console.error("Failed to initialize auth listener", {
           error: error instanceof Error ? error.message : String(error),
         });
         setLoading(false);
@@ -56,7 +64,7 @@ export function AuthProvider({ children }: AuthProviderProps): React.JSX.Element
 export function useAuth(): AuthContextValue {
   const context = useContext(AuthContext);
   if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
+    throw new Error("useAuth must be used within an AuthProvider");
   }
   return context;
 }

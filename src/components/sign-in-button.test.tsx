@@ -1,41 +1,45 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { SignInButton } from './sign-in-button';
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { SignInButton } from "./sign-in-button";
 
-vi.mock('firebase/auth', () => ({
+vi.mock("firebase/auth", () => ({
   signInWithPopup: vi.fn(),
   GoogleAuthProvider: class {},
 }));
 
-vi.mock('../lib/firebase-client', () => ({
+vi.mock("../lib/firebase-client", () => ({
   getAuthInstance: vi.fn().mockResolvedValue({}),
 }));
 
-describe('SignInButton', () => {
+describe("SignInButton", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it('should render with sign-in text', () => {
+  it("should render with sign-in text", () => {
     render(<SignInButton />);
-    expect(screen.getByRole('button', { name: /sign in with google/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /sign in with google/i }),
+    ).toBeInTheDocument();
   });
 
-  it('should not be disabled initially', () => {
+  it("should not be disabled initially", () => {
     render(<SignInButton />);
-    const button = screen.getByRole('button', { name: /sign in with google/i });
+    const button = screen.getByRole("button", { name: /sign in with google/i });
     expect(button).not.toBeDisabled();
   });
 
-  it('should display error message when popup is blocked', async () => {
-    const { signInWithPopup } = await import('firebase/auth');
+  it("should display error message when popup is blocked", async () => {
+    const { signInWithPopup } = await import("firebase/auth");
     const mockSignInWithPopup = vi.mocked(signInWithPopup);
-    const popupBlockedError = new Error('Popup blocked');
-    (popupBlockedError as { code: string }).code = 'auth/popup-blocked';
+    const popupBlockedError = new Error("Popup blocked") as Error & {
+      code: string;
+    };
+    popupBlockedError.code = "auth/popup-blocked";
     mockSignInWithPopup.mockRejectedValue(popupBlockedError);
 
     render(<SignInButton />);
-    const button = screen.getByRole('button', { name: /sign in with google/i });
+    const button = screen.getByRole("button", { name: /sign in with google/i });
     fireEvent.click(button);
 
     await waitFor(() => {
@@ -43,15 +47,15 @@ describe('SignInButton', () => {
     });
   });
 
-  it('should not display error when popup is closed by user', async () => {
-    const { signInWithPopup } = await import('firebase/auth');
+  it("should not display error when popup is closed by user", async () => {
+    const { signInWithPopup } = await import("firebase/auth");
     const mockSignInWithPopup = vi.mocked(signInWithPopup);
     mockSignInWithPopup.mockRejectedValue({
-      code: 'auth/popup-closed-by-user',
+      code: "auth/popup-closed-by-user",
     });
 
     render(<SignInButton />);
-    const button = screen.getByRole('button', { name: /sign in with google/i });
+    const button = screen.getByRole("button", { name: /sign in with google/i });
     fireEvent.click(button);
 
     await waitFor(() => {

@@ -1,6 +1,11 @@
-import { initializeApp, type FirebaseApp } from 'firebase/app';
-import { getAuth, browserLocalPersistence, setPersistence, type Auth } from 'firebase/auth';
-import { getFirestore, type Firestore } from 'firebase/firestore';
+import { initializeApp, type FirebaseApp } from "firebase/app";
+import {
+  getAuth,
+  browserLocalPersistence,
+  setPersistence,
+  type Auth,
+} from "firebase/auth";
+import { getFirestore, type Firestore } from "firebase/firestore";
 
 const FIREBASE_CONFIG = {
   apiKey: import.meta.env.PUBLIC_FIREBASE_API_KEY,

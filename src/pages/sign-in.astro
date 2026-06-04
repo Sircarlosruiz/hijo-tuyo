@@ -1,13 +1,8 @@
 ---
 import Layout from '../layouts/Layout.astro';
-import { AuthLoading } from '../components/auth-loading';
-import { SignInButton } from '../components/sign-in-button';
+import { SignInPage } from '../pages/sign-in-page';
 ---
 
 <Layout title="Sign In">
-  <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh;">
-    <h1>Sign In</h1>
-    <p>Sign in to track your match history and compete on the leaderboard.</p>
-    <SignInButton client:load />
-  </div>
+  <SignInPage client:load />
 </Layout>

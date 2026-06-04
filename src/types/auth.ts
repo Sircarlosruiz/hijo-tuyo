@@ -1,4 +1,4 @@
-import type { User } from 'firebase/auth';
+import type { User } from "firebase/auth";
 
 export interface AuthContextValue {
   user: User | null;
@@ -11,6 +11,6 @@ export class AuthError extends Error {
     public readonly code: string,
   ) {
     super(message);
-    this.name = 'AuthError';
+    this.name = "AuthError";
   }
 }

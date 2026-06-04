@@ -1,10 +1,14 @@
-import { AuthProvider } from '../hooks/use-auth';
-import type { ReactNode } from 'react';
+import { AuthProvider } from "../hooks/use-auth";
+import type { ComponentType } from "react";
 
-interface AuthProviderWrapperProps {
-  children: ReactNode;
-}
-
-export default function AuthProviderWrapper({ children }: AuthProviderWrapperProps): React.JSX.Element {
-  return <AuthProvider>{children}</AuthProvider>;
+export function withAuthProvider<P extends object>(
+  Page: ComponentType<P>,
+): ComponentType<P> {
+  return function PageWithAuthProvider(props: P): React.JSX.Element {
+    return (
+      <AuthProvider>
+        <Page {...props} />
+      </AuthProvider>
+    );
+  };
 }
