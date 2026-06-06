@@ -7,6 +7,7 @@ import { AppShell } from '../components/app-shell';
 import { AddGameModal } from '../components/add-game-modal';
 import { Avatar, Icon } from '../components/ui';
 import { getFirestoreInstance } from '../lib/firebase-client';
+import { resolvePlayerName } from '../lib/resolve-player-name';
 import type { Game, Player, MatchFormState, MatchFormErrors } from '../types/match';
 import { INITIAL_FORM_STATE } from '../types/match';
 
@@ -111,9 +112,14 @@ function MatchEntryContent(): React.JSX.Element {
         setGames(gamesSnap.docs.map((doc: QueryDocumentSnapshot<DocumentData>) => ({
           id: doc.id, name: (doc.data().name as string) ?? 'Unknown', category: (doc.data().category as string) ?? '', ref: doc.ref,
         })));
-        setPlayers(playersSnap.docs.map((doc: QueryDocumentSnapshot<DocumentData>) => ({
-          id: doc.id, displayName: (doc.data().name as string) ?? 'Unknown', ref: doc.ref,
-        })));
+        setPlayers(playersSnap.docs.map((doc: QueryDocumentSnapshot<DocumentData>) => {
+          const data = doc.data();
+          return {
+            id: doc.id,
+            displayName: resolvePlayerName({ nickname: data.nickname, name: data.name }),
+            ref: doc.ref,
+          };
+        }));
       } catch (err) {
         if (!cancelled) setFetchError(err instanceof Error ? err.message : 'Failed to load data');
       } finally {

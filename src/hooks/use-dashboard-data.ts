@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { collection, getDocs, orderBy, query } from 'firebase/firestore';
 import { getFirestoreInstance } from '../lib/firebase-client';
+import { resolvePlayerName } from '../lib/resolve-player-name';
 import {
   type DashboardData,
   type PlayerStats,
@@ -59,7 +60,7 @@ function computePlayerStats(
   for (const [uid, { wins, losses }] of statsMap.entries()) {
     const total = wins + losses;
     const userData = usuarios[uid];
-    const displayName = userData?.nickname ?? userData?.name ?? 'Unknown';
+    const displayName = userData ? resolvePlayerName(userData) : 'Unknown';
     stats.push({
       uid,
       displayName,
@@ -80,7 +81,7 @@ function mapMatchRecord(
 ): MatchRecord {
   const getPlayerName = (uid: string): string => {
     const user = usuarios[uid];
-    return user?.nickname ?? user?.name ?? 'Unknown';
+    return user ? resolvePlayerName(user) : 'Unknown';
   };
 
   return {

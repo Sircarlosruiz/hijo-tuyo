@@ -11,6 +11,7 @@ import {
   type DocumentData,
 } from 'firebase/firestore';
 import { getFirestoreInstance } from '../lib/firebase-client';
+import { resolvePlayerName } from '../lib/resolve-player-name';
 import type { TournamentDocument, TournamentFixture, GameOption, PlayerOption } from '../types/tournament';
 
 interface UseTournamentsResult {
@@ -154,10 +155,13 @@ export function useTournamentCreateData(): UseTournamentCreateDataResult {
           })),
         );
         setPlayers(
-          playersSnap.docs.map((d: QueryDocumentSnapshot<DocumentData>) => ({
-            id: d.id,
-            displayName: (d.data().name as string) ?? 'Unknown',
-          })),
+          playersSnap.docs.map((d: QueryDocumentSnapshot<DocumentData>) => {
+            const data = d.data();
+            return {
+              id: d.id,
+              displayName: resolvePlayerName({ nickname: data.nickname, name: data.name }),
+            };
+          }),
         );
       } catch (err) {
         if (!cancelled) {
