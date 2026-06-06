@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react';
 import { useAuth } from '../hooks/use-auth';
+import { useUsuario } from '../hooks/use-usuario';
+import { resolvePlayerName } from '../lib/resolve-player-name';
 import { Avatar, BrandMark, Icon } from './ui';
 
 interface AppShellProps {
@@ -16,7 +18,8 @@ const NAV = [
 
 export function AppShell({ children, activePage }: AppShellProps): React.JSX.Element {
   const { user } = useAuth();
-  const displayName = user?.displayName ?? 'Player';
+  const { usuario } = useUsuario(user?.uid);
+  const displayName = usuario ? resolvePlayerName(usuario) : (user?.displayName ?? 'Player');
   const uid = user?.uid ?? '';
   const photoURL = user?.photoURL ?? undefined;
 
