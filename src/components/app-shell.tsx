@@ -3,6 +3,7 @@ import { useAuth } from '../hooks/use-auth';
 import { useUsuario } from '../hooks/use-usuario';
 import { resolvePlayerName } from '../lib/resolve-player-name';
 import { Avatar, BrandMark, Icon } from './ui';
+import { GroupSwitcher } from './group-switcher';
 
 interface AppShellProps {
   children: ReactNode;
@@ -68,6 +69,7 @@ export function AppShell({ children, activePage }: AppShellProps): React.JSX.Ele
             <BrandMark size={30} />
             <span className="ht-brand-name" style={{ fontSize: 16 }}>HIJO TUYO</span>
           </div>
+          <GroupSwitcher className="ht-topbar-switcher" />
           <a href="/profile" style={{ background: 'none', border: 'none', padding: 0 }}>
             <Avatar uid={uid} displayName={displayName} photoURL={photoURL} size={34} ring isYou />
           </a>
