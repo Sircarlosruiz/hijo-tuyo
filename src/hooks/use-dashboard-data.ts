@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { collection, getDocs, orderBy, query } from 'firebase/firestore';
+import { collection, getDocs, orderBy, query, where } from 'firebase/firestore';
 import { getFirestoreInstance } from '../lib/firebase-client';
 import { resolvePlayerName } from '../lib/resolve-player-name';
 import {
@@ -100,7 +100,9 @@ function mapMatchRecord(
   };
 }
 
-export function useDashboardData(): DashboardData & {
+export function useDashboardData(
+  groupId?: string,
+): DashboardData & {
   games: Game[];
   filterByGame: (gameId: string | null) => PlayerStats[];
 } {
@@ -111,14 +113,28 @@ export function useDashboardData(): DashboardData & {
   const [error, setError] = useState<string | null>(null);
 
   const fetchData = useCallback(async (): Promise<void> => {
+    if (!groupId) {
+      setPartidos([]);
+      setUsuarios({});
+      setGames([]);
+      setLoading(false);
+      setError(null);
+      return;
+    }
+
     try {
       setLoading(true);
       setError(null);
 
       const db = getFirestoreInstance();
 
+      const partidosQuery = query(
+        collection(db, 'partidos'),
+        where('groupId', '==', groupId),
+      );
+
       const [partidosSnap, usuariosSnap, juegosSnap] = await Promise.all([
-        getDocs(collection(db, 'partidos')),
+        getDocs(partidosQuery),
         getDocs(collection(db, 'usuarios')),
         getDocs(collection(db, 'juegos')),
       ]);
@@ -153,7 +169,7 @@ export function useDashboardData(): DashboardData & {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [groupId]);
 
   useEffect(() => {
     void fetchData();
@@ -177,7 +193,10 @@ export function useDashboardData(): DashboardData & {
   return { playerStats, loading, error, games, filterByGame };
 }
 
-export function useRecentActivity(limit: number = 10): {
+export function useRecentActivity(
+  limit: number = 10,
+  groupId?: string,
+): {
   activities: MatchRecord[];
   loading: boolean;
   error: string | null;
@@ -187,14 +206,27 @@ export function useRecentActivity(limit: number = 10): {
   const [error, setError] = useState<string | null>(null);
 
   const fetchData = useCallback(async (): Promise<void> => {
+    if (!groupId) {
+      setActivities([]);
+      setLoading(false);
+      setError(null);
+      return;
+    }
+
     try {
       setLoading(true);
       setError(null);
 
       const db = getFirestoreInstance();
 
+      const partidosQuery = query(
+        collection(db, 'partidos'),
+        where('groupId', '==', groupId),
+        orderBy('createdAt', 'desc'),
+      );
+
       const [partidosSnap, usuariosSnap, juegosSnap] = await Promise.all([
-        getDocs(query(collection(db, 'partidos'), orderBy('createdAt', 'desc'))),
+        getDocs(partidosQuery),
         getDocs(collection(db, 'usuarios')),
         getDocs(collection(db, 'juegos')),
       ]);
@@ -227,7 +259,7 @@ export function useRecentActivity(limit: number = 10): {
     } finally {
       setLoading(false);
     }
-  }, [limit]);
+  }, [groupId, limit]);
 
   useEffect(() => {
     void fetchData();

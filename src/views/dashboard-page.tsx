@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { RequireAuth } from '../components/require-auth';
-import { withAuthProvider } from '../components/auth-provider-wrapper';
+import { withAuthProvider, WithActiveGroup } from '../components/auth-provider-wrapper';
 import { AppShell } from '../components/app-shell';
 import { GameFilter } from '../components/game-filter';
 import { ActivityFeed } from '../components/activity-feed';
@@ -9,12 +9,19 @@ import { Podium, StandingsTable } from '../components/podium-standings';
 import { Icon } from '../components/ui';
 import { useDashboardData, useRecentActivity } from '../hooks/use-dashboard-data';
 import { useAuth } from '../hooks/use-auth';
+import { useActiveGroup } from '../hooks/use-active-group';
 import type { PlayerStats } from '../types/dashboard';
 
 function DashboardContent(): React.JSX.Element {
   const { user } = useAuth();
-  const { playerStats, loading, error, games, filterByGame } = useDashboardData();
-  const { activities, loading: activityLoading } = useRecentActivity(10);
+  const { activeGroupId, loading: groupLoading } = useActiveGroup();
+  const { playerStats, loading, error, games, filterByGame } = useDashboardData(
+    activeGroupId ?? undefined,
+  );
+  const { activities, loading: activityLoading } = useRecentActivity(
+    10,
+    activeGroupId ?? undefined,
+  );
   const [selectedGameId, setSelectedGameId] = useState<string | null>(null);
   const [opponent, setOpponent] = useState<{ uid: string; name: string } | null>(null);
 
@@ -24,7 +31,7 @@ function DashboardContent(): React.JSX.Element {
     setOpponent({ uid: player.uid, name: player.displayName });
   };
 
-  if (loading) {
+  if (groupLoading || loading) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingTop: 40 }}>
         <div className="ht-eyebrow">Loading standings…</div>
@@ -89,9 +96,11 @@ function DashboardContent(): React.JSX.Element {
 function DashboardPageContent(): React.JSX.Element {
   return (
     <RequireAuth>
-      <AppShell activePage="dashboard">
-        <DashboardContent />
-      </AppShell>
+      <WithActiveGroup>
+        <AppShell activePage="dashboard">
+          <DashboardContent />
+        </AppShell>
+      </WithActiveGroup>
     </RequireAuth>
   );
 }

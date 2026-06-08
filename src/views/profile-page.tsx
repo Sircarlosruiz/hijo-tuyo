@@ -1,13 +1,14 @@
 import { useState, useEffect, useCallback } from 'react';
-import { doc, getDoc, getDocs, updateDoc, collection } from 'firebase/firestore';
+import { doc, getDoc, getDocs, updateDoc, collection, query, where } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
 import { RequireAuth } from '../components/require-auth';
-import { withAuthProvider } from '../components/auth-provider-wrapper';
+import { withAuthProvider, WithActiveGroup } from '../components/auth-provider-wrapper';
 import { AppShell } from '../components/app-shell';
 import { SignOutButton } from '../components/sign-out-button';
 import { Avatar, RecordPill, StreakBadge, Icon } from '../components/ui';
 import { getFirestoreInstance } from '../lib/firebase-client';
 import { useAuth } from '../hooks/use-auth';
+import { useActiveGroup } from '../hooks/use-active-group';
 
 interface ProfileData { nickname: string | null; displayName: string | null; }
 
@@ -33,10 +34,10 @@ function StatTile({ label, children, accent }: { label: string; children: React.
   );
 }
 
-async function loadSeasonStats(uid: string): Promise<SeasonStats> {
+async function loadSeasonStats(uid: string, groupId: string): Promise<SeasonStats> {
   const db = getFirestoreInstance();
   const [partidosSnap, juegosSnap, usuariosSnap] = await Promise.all([
-    getDocs(collection(db, 'partidos')),
+    getDocs(query(collection(db, 'partidos'), where('groupId', '==', groupId))),
     getDocs(collection(db, 'juegos')),
     getDocs(collection(db, 'usuarios')),
   ]);
@@ -115,6 +116,7 @@ function ProfileContent(): React.JSX.Element {
   const db = getFirestoreInstance();
   const auth = getAuth();
   const { user } = useAuth();
+  const { activeGroupId, loading: groupLoading } = useActiveGroup();
 
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -127,7 +129,7 @@ function ProfileContent(): React.JSX.Element {
   const [stats, setStats] = useState<SeasonStats | null>(null);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || groupLoading) return;
     let cancelled = false;
     void (async () => {
       try {
@@ -139,8 +141,12 @@ function ProfileContent(): React.JSX.Element {
         } else {
           setProfile({ nickname: null, displayName: user.displayName ?? null });
         }
-        const s = await loadSeasonStats(user.uid);
-        if (!cancelled) setStats(s);
+        if (activeGroupId) {
+          const s = await loadSeasonStats(user.uid, activeGroupId);
+          if (!cancelled) setStats(s);
+        } else if (!cancelled) {
+          setStats(null);
+        }
       } catch (err) {
         if (!cancelled) setFetchError(err instanceof Error ? err.message : 'Failed to load profile');
       } finally {
@@ -148,7 +154,7 @@ function ProfileContent(): React.JSX.Element {
       }
     })();
     return () => { cancelled = true; };
-  }, [db, user]);
+  }, [db, user, activeGroupId, groupLoading]);
 
   useEffect(() => {
     if (profile) setNickname(profile.nickname ?? profile.displayName ?? '');
@@ -177,7 +183,7 @@ function ProfileContent(): React.JSX.Element {
 
   const displayedAs = profile?.nickname ?? profile?.displayName ?? user?.displayName ?? 'Player';
 
-  if (loading) {
+  if (loading || groupLoading) {
     return <div className="ht-eyebrow" style={{ paddingTop: 40 }}>Loading…</div>;
   }
   if (fetchError) {
@@ -277,9 +283,11 @@ function ProfileContent(): React.JSX.Element {
 function ProfilePageContent(): React.JSX.Element {
   return (
     <RequireAuth>
-      <AppShell activePage="profile">
-        <ProfileContent />
-      </AppShell>
+      <WithActiveGroup>
+        <AppShell activePage="profile">
+          <ProfileContent />
+        </AppShell>
+      </WithActiveGroup>
     </RequireAuth>
   );
 }

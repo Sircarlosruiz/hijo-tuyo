@@ -12,6 +12,9 @@ import {
   serverTimestamp,
   Timestamp,
   updateDoc,
+  deleteDoc,
+  arrayRemove,
+  type DocumentReference,
 } from 'firebase/firestore';
 import { getFirestoreInstance } from './firebase-client';
 import type {
@@ -52,6 +55,15 @@ export async function createGroup(
   batch.set(groupRef, groupData);
   batch.set(membershipRef, membershipData);
 
+  const userRef = doc(db, 'usuarios', uid);
+  const userSnap = await getDoc(userRef);
+  if (userSnap.exists()) {
+    const existingGroupIds: string[] = userSnap.data().groupIds || [];
+    if (!existingGroupIds.includes(groupRef.id)) {
+      batch.update(userRef, { groupIds: [...existingGroupIds, groupRef.id] });
+    }
+  }
+
   await batch.commit();
 
   return groupRef.id;
@@ -77,49 +89,46 @@ export async function fetchMyGroups(
 ): Promise<GroupWithMembership[]> {
   const db = getFirestoreInstance();
 
-  // Fetch memberships for this user via collectionGroup query
-  const membersQuery = query(
-    collectionGroup(db, 'members'),
-    where('__name__', '==', uid),
-  );
+  const userRef = doc(db, 'usuarios', uid);
+  const userSnap = await getDoc(userRef);
+  const userData = userSnap.exists() ? userSnap.data() : {};
+  const groupIdsFromUser: string[] = userData.groupIds ?? [];
+  const activeGroupId =
+    typeof userData.activeGroupId === 'string' ? userData.activeGroupId : null;
 
-  const membershipsSnapshot = await getDocs(membersQuery);
-  const groupIds: string[] = [];
-  const memberships = new Map<string, MembershipDoc>();
-
-  for (const memberDoc of membershipsSnapshot.docs) {
-    // memberDoc.ref.path is like "groups/{groupId}/members/{uid}"
-    const parts = memberDoc.ref.path.split('/');
-    const groupId = parts[1];
-    groupIds.push(groupId);
-    memberships.set(groupId, memberDoc.data() as MembershipDoc);
-  }
+  const groupIds = [
+    ...new Set([
+      ...groupIdsFromUser,
+      ...(activeGroupId ? [activeGroupId] : []),
+    ]),
+  ];
 
   if (groupIds.length === 0) {
     return [];
   }
 
-  // Fetch all groups in one query
-  const groupsQuery = query(
-    collection(db, 'groups'),
-    where('__name__', 'in', groupIds.slice(0, 10)),
-  );
-
-  const groupsSnapshot = await getDocs(groupsQuery);
   const results: GroupWithMembership[] = [];
 
-  for (const groupDoc of groupsSnapshot.docs) {
-    const groupData = groupDoc.data() as GroupDoc;
-    const membership = memberships.get(groupDoc.id);
-    if (membership) {
-      results.push({
-        id: groupDoc.id,
-        name: groupData.name,
-        ownerUid: groupData.ownerUid,
-        createdAt: groupData.createdAt,
-        myRole: membership.role,
-      });
-    }
+  // Use getDoc per group — collection queries on `groups` fail security rules
+  // because isGroupMember() cannot be inferred from query filters alone.
+  for (const groupId of groupIds) {
+    const membershipSnap = await getDoc(
+      doc(db, 'groups', groupId, 'members', uid),
+    );
+    if (!membershipSnap.exists()) continue;
+
+    const groupSnap = await getDoc(doc(db, 'groups', groupId));
+    if (!groupSnap.exists()) continue;
+
+    const groupData = groupSnap.data() as GroupDoc;
+    const membership = membershipSnap.data() as MembershipDoc;
+    results.push({
+      id: groupSnap.id,
+      name: groupData.name,
+      ownerUid: groupData.ownerUid,
+      createdAt: groupData.createdAt,
+      myRole: membership.role,
+    });
   }
 
   return results;
@@ -325,4 +334,215 @@ export async function regenerateInvite(
 
   // Create new invite
   return createInvite(groupId, uid, options);
+}
+
+// ─── Member Management ───────────────────────────────────────────────
+
+export async function removeMember(
+  groupId: string,
+  targetUid: string,
+  callerUid: string,
+): Promise<void> {
+  const db = getFirestoreInstance();
+
+  const callerMembership = await fetchMembership(groupId, callerUid);
+  if (!callerMembership || callerMembership.role !== 'owner') {
+    throw new Error('Only the group owner can remove members');
+  }
+
+  if (targetUid === callerUid) {
+    throw new Error('Owner cannot remove themselves. Delete the group instead.');
+  }
+
+  const targetMembership = await fetchMembership(groupId, targetUid);
+  if (!targetMembership) {
+    throw new Error('User is not a member of this group');
+  }
+
+  if (targetMembership.role === 'owner') {
+    throw new Error('Cannot remove the group owner');
+  }
+
+  const batch = writeBatch(db);
+  const membershipRef = doc(db, 'groups', groupId, 'members', targetUid);
+  batch.delete(membershipRef);
+
+  // Remove from target's groupIds array
+  const userRef = doc(db, 'usuarios', targetUid);
+  batch.update(userRef, { groupIds: arrayRemove(groupId) });
+
+  // If this was their active group, clear it
+  const userSnap = await getDoc(userRef);
+  if (userSnap.exists() && userSnap.data().activeGroupId === groupId) {
+    batch.update(userRef, { activeGroupId: null });
+  }
+
+  await batch.commit();
+}
+
+export async function leaveGroup(
+  groupId: string,
+  uid: string,
+): Promise<void> {
+  const db = getFirestoreInstance();
+
+  const membership = await fetchMembership(groupId, uid);
+  if (!membership) {
+    throw new Error('You are not a member of this group');
+  }
+
+  if (membership.role === 'owner') {
+    throw new Error('Owner cannot leave the group. Delete the group instead.');
+  }
+
+  const batch = writeBatch(db);
+  const membershipRef = doc(db, 'groups', groupId, 'members', uid);
+  batch.delete(membershipRef);
+
+  const userRef = doc(db, 'usuarios', uid);
+  batch.update(userRef, { groupIds: arrayRemove(groupId) });
+
+  // If this was their active group, clear it
+  const userSnap = await getDoc(userRef);
+  if (userSnap.exists() && userSnap.data().activeGroupId === groupId) {
+    batch.update(userRef, { activeGroupId: null });
+  }
+
+  await batch.commit();
+}
+
+export async function fetchGroupMembers(
+  groupId: string,
+): Promise<Array<{ uid: string; role: string; joinedAt: Timestamp }>> {
+  const db = getFirestoreInstance();
+  const membersRef = collection(db, 'groups', groupId, 'members');
+  const snapshot = await getDocs(membersRef);
+
+  return snapshot.docs.map((d) => ({
+    uid: d.id,
+    ...d.data(),
+  })) as Array<{ uid: string; role: string; joinedAt: Timestamp }>;
+}
+
+// ─── Group Settings ──────────────────────────────────────────────────
+
+export async function renameGroup(
+  groupId: string,
+  newName: string,
+  uid: string,
+): Promise<void> {
+  const db = getFirestoreInstance();
+
+  const membership = await fetchMembership(groupId, uid);
+  if (!membership || membership.role !== 'owner') {
+    throw new Error('Only the group owner can rename the group');
+  }
+
+  const trimmed = newName.trim();
+  if (!trimmed) {
+    throw new Error('Group name cannot be empty');
+  }
+
+  const groupRef = doc(db, 'groups', groupId);
+  await updateDoc(groupRef, { name: trimmed });
+}
+
+export async function deleteGroup(
+  groupId: string,
+  uid: string,
+): Promise<{
+  membersRemoved: number;
+  invitesRemoved: number;
+  partidosRemoved: number;
+  torneosRemoved: number;
+}> {
+  const db = getFirestoreInstance();
+
+  const membership = await fetchMembership(groupId, uid);
+  if (!membership || membership.role !== 'owner') {
+    throw new Error('Only the group owner can delete the group');
+  }
+
+  // Fetch all subcollections and scoped docs
+  const [membersSnap, invitesSnap, partidosSnap, torneosSnap] = await Promise.all([
+    getDocs(collection(db, 'groups', groupId, 'members')),
+    getDocs(collection(db, 'groups', groupId, 'invites')),
+    getDocs(query(collection(db, 'partidos'), where('groupId', '==', groupId))),
+    getDocs(query(collection(db, 'torneos'), where('groupId', '==', groupId))),
+  ]);
+
+  // Batch delete in chunks of 500 (Firestore limit)
+  async function batchDelete(refs: DocumentReference[]): Promise<void> {
+    const chunks: DocumentReference[][] = [];
+    for (let i = 0; i < refs.length; i += 500) {
+      chunks.push(refs.slice(i, i + 500));
+    }
+    for (const chunk of chunks) {
+      const batch = writeBatch(db);
+      for (const ref of chunk) {
+        batch.delete(ref);
+      }
+      await batch.commit();
+    }
+  }
+
+  // Delete members (also remove from their groupIds)
+  const memberUids = membersSnap.docs.map((d) => d.id);
+  for (const memberUid of memberUids) {
+    const userRef = doc(db, 'usuarios', memberUid);
+    const batch = writeBatch(db);
+    batch.update(userRef, {
+      groupIds: arrayRemove(groupId),
+      activeGroupId: null,
+    });
+    await batch.commit();
+  }
+
+  await batchDelete(membersSnap.docs.map((d) => d.ref));
+  await batchDelete(invitesSnap.docs.map((d) => d.ref));
+  await batchDelete(partidosSnap.docs.map((d) => d.ref));
+  await batchDelete(torneosSnap.docs.map((d) => d.ref));
+
+  // Delete the group doc itself
+  await deleteDoc(doc(db, 'groups', groupId));
+
+  return {
+    membersRemoved: membersSnap.size,
+    invitesRemoved: invitesSnap.size,
+    partidosRemoved: partidosSnap.size,
+    torneosRemoved: torneosSnap.size,
+  };
+}
+
+// ─── Scoping Helpers ─────────────────────────────────────────────────
+
+export function withGroupId<T extends Record<string, unknown>>(
+  data: T,
+  groupId: string,
+): T & { groupId: string } {
+  return { ...data, groupId };
+}
+
+export function scopedPartidosQuery(
+  groupId: string,
+): ReturnType<typeof query> {
+  const db = getFirestoreInstance();
+  return query(collection(db, 'partidos'), where('groupId', '==', groupId));
+}
+
+export function scopedTorneosQuery(
+  groupId: string,
+): ReturnType<typeof query> {
+  const db = getFirestoreInstance();
+  return query(collection(db, 'torneos'), where('groupId', '==', groupId));
+}
+
+export function scopedPartidosOrderedQuery(
+  groupId: string,
+): ReturnType<typeof query> {
+  const db = getFirestoreInstance();
+  return query(
+    collection(db, 'partidos'),
+    where('groupId', '==', groupId),
+  );
 }

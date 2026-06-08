@@ -12,6 +12,7 @@ vi.mock('firebase/firestore', () => ({
   where: vi.fn(),
   writeBatch: vi.fn(() => ({
     set: vi.fn(),
+    update: vi.fn(),
     commit: vi.fn(),
   })),
   runTransaction: vi.fn((_db, fn) => fn({ get: vi.fn(), set: vi.fn(), update: vi.fn() })),
@@ -69,6 +70,7 @@ describe('createGroup', () => {
   it('should create group and membership atomically', async () => {
     const mockBatch = {
       set: vi.fn(),
+      update: vi.fn(),
       commit: vi.fn(),
     };
     vi.mocked(writeBatch).mockReturnValue(mockBatch as never);
@@ -78,7 +80,13 @@ describe('createGroup', () => {
 
     vi.mocked(doc)
       .mockReturnValueOnce(mockGroupRef as never)
-      .mockReturnValueOnce(mockMembershipRef as never);
+      .mockReturnValueOnce(mockMembershipRef as never)
+      .mockReturnValueOnce({ path: 'usuarios/uid-1' } as never);
+
+    vi.mocked(getDoc).mockResolvedValue({
+      exists: () => true,
+      data: () => ({ groupIds: [] }),
+    } as never);
 
     const groupId = await createGroup('uid-1', 'Test Group');
 
