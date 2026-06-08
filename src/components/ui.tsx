@@ -85,6 +85,7 @@ export function Icon({ name, style, className }: IconProps): React.JSX.Element {
     standings: <><path {...p} d="M8 21h8M12 17v4" /><path {...p} d="M7 4h10v5a5 5 0 0 1-10 0V4Z" /><path {...p} d="M17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3" /></>,
     plus: <path {...p} d="M12 5v14M5 12h14" />,
     user: <><circle {...p} cx="12" cy="8" r="4" /><path {...p} d="M5 21a7 7 0 0 1 14 0" /></>,
+    users: <><path {...p} d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle {...p} cx="9" cy="7" r="4" /><path {...p} d="M22 21v-2a4 4 0 0 0-3-3.87" /><path {...p} d="M16 3.13a4 4 0 0 1 0 7.75" /></>,
     swords: <><path {...p} d="M14.5 17.5 3 6V3h3l11.5 11.5M13 19l6-6M16 16l4 4M19 21l2-2M4.5 17.5 16 6V3h-3L1.5 14.5M11 19l-6-6M8 16l-4 4M5 21l-2-2" /></>,
     fire: <path {...p} d="M12 3c1 3-1 4-1 6 0 1 1 2 1 2s2-1 2-3c2 1 3 3.5 3 6a5 5 0 0 1-10 0c0-3 2-4 2-7 0-2 2-3 3-4Z" />,
     snow: <><path {...p} d="M12 2v20M4 7l16 10M20 7 4 17" /></>,

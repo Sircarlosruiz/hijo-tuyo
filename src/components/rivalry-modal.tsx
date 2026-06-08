@@ -5,6 +5,7 @@ import { getFirestoreInstance } from '../lib/firebase-client';
 import { FirestoreError } from '../types/dashboard';
 import { formatDistanceToNow, format } from 'date-fns';
 import { Avatar, Icon, RecordPill } from './ui';
+import { useActiveGroup } from '../hooks/use-active-group';
 
 interface RivalryModalProps {
   isOpen: boolean;
@@ -42,9 +43,19 @@ async function fetchJuegos(): Promise<Record<string, string>> {
   return games;
 }
 
-async function fetchRivalryData(currentUid: string, opponentUid: string): Promise<FilteredPartido[]> {
+async function fetchRivalryData(
+  currentUid: string,
+  opponentUid: string,
+  groupId?: string,
+): Promise<FilteredPartido[]> {
   const db = getFirestoreInstance();
-  const q = query(collection(db, 'partidos'), where('player1Uid', 'in', [currentUid, opponentUid]));
+  const conditions = [
+    where('player1Uid', 'in', [currentUid, opponentUid]),
+  ];
+  if (groupId) {
+    conditions.push(where('groupId', '==', groupId));
+  }
+  const q = query(collection(db, 'partidos'), ...conditions);
   try {
     const snapshot = await getDocs(q);
     const partidos: FilteredPartido[] = [];
@@ -94,6 +105,7 @@ function banterLine(wins: number, losses: number, oppName: string): string {
 
 export function RivalryModal({ isOpen, opponentUid, opponentName, onClose }: RivalryModalProps): React.JSX.Element | null {
   const { user } = useAuth();
+  const { activeGroupId } = useActiveGroup();
   const [record, setRecord] = useState<RivalryRecord | null>(null);
   const [perGame, setPerGame] = useState<PerGameRecord[]>([]);
   const [lastMatch, setLastMatch] = useState<LastMatch | null>(null);
@@ -129,7 +141,7 @@ export function RivalryModal({ isOpen, opponentUid, opponentName, onClose }: Riv
     void (async () => {
       try {
         const [partidos, gameNames] = await Promise.all([
-          fetchRivalryData(user.uid, opponentUid),
+          fetchRivalryData(user.uid, opponentUid, activeGroupId ?? undefined),
           fetchJuegos(),
         ]);
         if (cancelled) return;
@@ -177,7 +189,7 @@ export function RivalryModal({ isOpen, opponentUid, opponentName, onClose }: Riv
     })();
 
     return () => { cancelled = true; };
-  }, [isOpen, user, opponentUid]);
+  }, [isOpen, user, opponentUid, activeGroupId]);
 
   const handleBackdrop = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     if (e.target === e.currentTarget) onClose();

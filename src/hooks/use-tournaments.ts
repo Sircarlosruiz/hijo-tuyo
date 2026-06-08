@@ -20,19 +20,33 @@ interface UseTournamentsResult {
   error: string | null;
 }
 
-export function useTournaments(): UseTournamentsResult {
+export function useTournaments(
+  groupId?: string,
+): UseTournamentsResult {
   const db = getFirestoreInstance();
   const [tournaments, setTournaments] = useState<TournamentDocument[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!groupId) {
+      setTournaments([]);
+      setLoading(false);
+      setError(null);
+      return;
+    }
+
     let cancelled = false;
+    setLoading(true);
 
     void (async () => {
       try {
-        const q = query(collection(db, 'torneos'), orderBy('createdAt', 'desc'));
-        const snap = await getDocs(q);
+        const baseQuery = query(
+          collection(db, 'torneos'),
+          where('groupId', '==', groupId),
+          orderBy('createdAt', 'desc'),
+        );
+        const snap = await getDocs(baseQuery);
         if (cancelled) return;
 
         setTournaments(
@@ -63,7 +77,7 @@ export function useTournaments(): UseTournamentsResult {
     return () => {
       cancelled = true;
     };
-  }, [db]);
+  }, [db, groupId]);
 
   return { tournaments, loading, error };
 }
@@ -200,7 +214,10 @@ interface UseTournamentPartidosResult {
   refresh: () => void;
 }
 
-export function useTournamentPartidos(tournamentId: string): UseTournamentPartidosResult {
+export function useTournamentPartidos(
+  tournamentId: string,
+  groupId?: string,
+): UseTournamentPartidosResult {
   const db = getFirestoreInstance();
   const [partidos, setPartidos] = useState<TournamentPartido[]>([]);
   const [loading, setLoading] = useState(true);
@@ -212,15 +229,22 @@ export function useTournamentPartidos(tournamentId: string): UseTournamentPartid
   }, []);
 
   useEffect(() => {
-    if (!tournamentId) return;
+    if (!tournamentId || !groupId) {
+      setPartidos([]);
+      setLoading(false);
+      setError(null);
+      return;
+    }
 
     let cancelled = false;
+    setLoading(true);
 
     void (async () => {
       try {
         const q = query(
           collection(db, 'partidos'),
           where('tournamentId', '==', tournamentId),
+          where('groupId', '==', groupId),
         );
         const snap = await getDocs(q);
         if (cancelled) return;
@@ -254,7 +278,7 @@ export function useTournamentPartidos(tournamentId: string): UseTournamentPartid
     return () => {
       cancelled = true;
     };
-  }, [db, tournamentId, refreshKey]);
+  }, [db, tournamentId, refreshKey, groupId]);
 
   return { partidos, loading, error, refresh };
 }

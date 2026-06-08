@@ -20,11 +20,13 @@ const INITIAL_FORM: TournamentFormData = {
 interface TournamentCreateFormProps {
   games: GameOption[];
   players: PlayerOption[];
+  groupId: string | null;
 }
 
 export function TournamentCreateForm({
   games,
   players,
+  groupId,
 }: TournamentCreateFormProps): React.JSX.Element {
   const db = getFirestoreInstance();
 
@@ -94,6 +96,11 @@ export function TournamentCreateForm({
         return;
       }
 
+      if (!groupId) {
+        setSubmitError('No active group selected');
+        return;
+      }
+
       setIsSubmitting(true);
       setSubmitError(null);
 
@@ -108,6 +115,7 @@ export function TournamentCreateForm({
           fixtures,
           createdByUid: auth.currentUser.uid,
           createdAt: serverTimestamp(),
+          groupId,
         });
 
         window.location.href = '/tournaments';
@@ -117,7 +125,7 @@ export function TournamentCreateForm({
         setIsSubmitting(false);
       }
     },
-    [form, db],
+    [form, db, groupId],
   );
 
   return (

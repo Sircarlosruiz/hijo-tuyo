@@ -1,14 +1,16 @@
 import { RequireAuth } from '../components/require-auth';
-import { withAuthProvider } from '../components/auth-provider-wrapper';
+import { withAuthProvider, WithActiveGroup } from '../components/auth-provider-wrapper';
 import { AppShell } from '../components/app-shell';
 import { TournamentList } from '../components/tournament-list';
 import { useTournaments, useTournamentCreateData } from '../hooks/use-tournaments';
+import { useActiveGroup } from '../hooks/use-active-group';
 
 function TournamentsListContent(): React.JSX.Element {
-  const { tournaments, loading, error } = useTournaments();
+  const { activeGroupId, loading: groupLoading } = useActiveGroup();
+  const { tournaments, loading, error } = useTournaments(activeGroupId ?? undefined);
   const { games, players, loading: dataLoading, error: dataError } = useTournamentCreateData();
 
-  if (loading || dataLoading) {
+  if (groupLoading || loading || dataLoading) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingTop: 40 }}>
         <div className="ht-eyebrow">Loading tournaments…</div>
@@ -39,9 +41,11 @@ function TournamentsListContent(): React.JSX.Element {
 function TournamentsListPageContent(): React.JSX.Element {
   return (
     <RequireAuth>
-      <AppShell activePage="tournaments">
-        <TournamentsListContent />
-      </AppShell>
+      <WithActiveGroup>
+        <AppShell activePage="tournaments">
+          <TournamentsListContent />
+        </AppShell>
+      </WithActiveGroup>
     </RequireAuth>
   );
 }

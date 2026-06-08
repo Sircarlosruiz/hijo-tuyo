@@ -1,13 +1,15 @@
 import { useState, useEffect, useCallback } from 'react';
-import { collection, getDocs, addDoc, serverTimestamp, type QueryDocumentSnapshot, type DocumentData } from 'firebase/firestore';
+import { collection, getDocs, addDoc, serverTimestamp, query, where, type QueryDocumentSnapshot, type DocumentData } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
 import { RequireAuth } from '../components/require-auth';
-import { withAuthProvider } from '../components/auth-provider-wrapper';
+import { withAuthProvider, WithActiveGroup } from '../components/auth-provider-wrapper';
 import { AppShell } from '../components/app-shell';
 import { AddGameModal } from '../components/add-game-modal';
 import { Avatar, Icon } from '../components/ui';
 import { getFirestoreInstance } from '../lib/firebase-client';
 import { resolvePlayerName } from '../lib/resolve-player-name';
+import { withGroupId, fetchGroupMembers } from '../lib/groups';
+import { useActiveGroup } from '../hooks/use-active-group';
 import type { Game, Player, MatchFormState, MatchFormErrors } from '../types/match';
 import { INITIAL_FORM_STATE } from '../types/match';
 
@@ -87,6 +89,7 @@ function ScoreStepper({ player, value, onChange }: ScoreStepperProps): React.JSX
 /* ---- Main page ---- */
 function MatchEntryContent(): React.JSX.Element {
   const db = getFirestoreInstance();
+  const { activeGroupId, loading: groupLoading } = useActiveGroup();
 
   const [games, setGames] = useState<Game[]>([]);
   const [players, setPlayers] = useState<Player[]>([]);
@@ -104,22 +107,46 @@ function MatchEntryContent(): React.JSX.Element {
     let cancelled = false;
     void (async () => {
       try {
-        const [gamesSnap, playersSnap] = await Promise.all([
-          getDocs(collection(db, 'juegos')),
-          getDocs(collection(db, 'usuarios')),
-        ]);
+        const gamesSnap = await getDocs(collection(db, 'juegos'));
         if (cancelled) return;
+
         setGames(gamesSnap.docs.map((doc: QueryDocumentSnapshot<DocumentData>) => ({
           id: doc.id, name: (doc.data().name as string) ?? 'Unknown', category: (doc.data().category as string) ?? '', ref: doc.ref,
         })));
-        setPlayers(playersSnap.docs.map((doc: QueryDocumentSnapshot<DocumentData>) => {
-          const data = doc.data();
-          return {
-            id: doc.id,
-            displayName: resolvePlayerName({ nickname: data.nickname, name: data.name }),
-            ref: doc.ref,
-          };
-        }));
+
+        // Players: scoped to active group members if available, otherwise fallback to all usuarios
+        if (activeGroupId) {
+          const members = await fetchGroupMembers(activeGroupId);
+          if (cancelled) return;
+
+          // Fetch user details for members
+          const playerPromises = members.map(async (m) => {
+            const userSnap = await getDocs(query(collection(db, 'usuarios'), where('__name__', '==', m.uid)));
+            if (!userSnap.empty) {
+              const data = userSnap.docs[0].data();
+              return {
+                id: m.uid,
+                displayName: resolvePlayerName({ nickname: data.nickname, name: data.name }),
+                ref: userSnap.docs[0].ref,
+              };
+            }
+            return { id: m.uid, displayName: 'Unknown', ref: {} as Player['ref'] };
+          });
+
+          const resolvedPlayers = await Promise.all(playerPromises);
+          if (!cancelled) setPlayers(resolvedPlayers);
+        } else {
+          const playersSnap = await getDocs(collection(db, 'usuarios'));
+          if (cancelled) return;
+          setPlayers(playersSnap.docs.map((doc: QueryDocumentSnapshot<DocumentData>) => {
+            const data = doc.data();
+            return {
+              id: doc.id,
+              displayName: resolvePlayerName({ nickname: data.nickname, name: data.name }),
+              ref: doc.ref,
+            };
+          }));
+        }
       } catch (err) {
         if (!cancelled) setFetchError(err instanceof Error ? err.message : 'Failed to load data');
       } finally {
@@ -127,7 +154,7 @@ function MatchEntryContent(): React.JSX.Element {
       }
     })();
     return () => { cancelled = true; };
-  }, [db]);
+  }, [db, activeGroupId]);
 
   const p1obj = players.find((p) => p.id === form.player1Uid) ?? null;
   const p2obj = players.find((p) => p.id === form.player2Uid) ?? null;
@@ -158,14 +185,16 @@ function MatchEntryContent(): React.JSX.Element {
 
     setIsSubmitting(true); setSubmitStatus('idle'); setSubmitError(null);
     try {
-      await addDoc(collection(db, 'partidos'), {
+      const matchData = withGroupId({
         gameId: form.gameId,
         player1Uid: form.player1Uid, player2Uid: form.player2Uid,
         score1: s1, score2: s2,
         winnerUid: s1 > s2 ? form.player1Uid : form.player2Uid,
         recordedByUid: auth.currentUser.uid,
         createdAt: serverTimestamp(),
-      });
+      }, activeGroupId ?? '');
+
+      await addDoc(collection(db, 'partidos'), matchData);
       setSubmitStatus('success');
       setForm(INITIAL_FORM_STATE);
       setErrors({});
@@ -293,9 +322,11 @@ function MatchEntryContent(): React.JSX.Element {
 function MatchEntryPageContent(): React.JSX.Element {
   return (
     <RequireAuth>
-      <AppShell activePage="log">
-        <MatchEntryContent />
-      </AppShell>
+      <WithActiveGroup>
+        <AppShell activePage="log">
+          <MatchEntryContent />
+        </AppShell>
+      </WithActiveGroup>
     </RequireAuth>
   );
 }

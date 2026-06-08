@@ -16,6 +16,7 @@ interface TournamentRecordFormProps {
   fixture: TournamentFixture;
   tournamentId: string;
   gameId: string;
+  groupId: string;
   games: GameOption[];
   players: PlayerOption[];
   onSuccess: () => void;
@@ -26,6 +27,7 @@ export function TournamentRecordForm({
   fixture,
   tournamentId,
   gameId,
+  groupId,
   games,
   players,
   onSuccess,
@@ -80,6 +82,7 @@ export function TournamentRecordForm({
           recordedByUid: auth.currentUser.uid,
           tournamentId,
           fixtureId: fixture.fixtureId,
+          groupId,
           createdAt: serverTimestamp(),
         });
 

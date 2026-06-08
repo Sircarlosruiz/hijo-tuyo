@@ -3,16 +3,18 @@ import { useAuth } from '../hooks/use-auth';
 import { useUsuario } from '../hooks/use-usuario';
 import { resolvePlayerName } from '../lib/resolve-player-name';
 import { Avatar, BrandMark, Icon } from './ui';
+import { GroupSwitcher } from './group-switcher';
 
 interface AppShellProps {
   children: ReactNode;
-  activePage: 'dashboard' | 'log' | 'tournaments' | 'profile';
+  activePage: 'dashboard' | 'log' | 'tournaments' | 'groups' | 'profile';
 }
 
 const NAV = [
   { key: 'dashboard' as const, icon: 'standings', label: 'Standings', href: '/dashboard' },
   { key: 'log' as const,       icon: 'plus',      label: 'Log Match',  href: '/match-entry' },
   { key: 'tournaments' as const, icon: 'trophy',  label: 'Tournaments', href: '/tournaments' },
+  { key: 'groups' as const,    icon: 'users',     label: 'Groups',     href: '/groups' },
   { key: 'profile' as const,   icon: 'user',      label: 'Profile',    href: '/profile' },
 ];
 
@@ -68,6 +70,7 @@ export function AppShell({ children, activePage }: AppShellProps): React.JSX.Ele
             <BrandMark size={30} />
             <span className="ht-brand-name" style={{ fontSize: 16 }}>HIJO TUYO</span>
           </div>
+          <GroupSwitcher className="ht-topbar-switcher" />
           <a href="/profile" style={{ background: 'none', border: 'none', padding: 0 }}>
             <Avatar uid={uid} displayName={displayName} photoURL={photoURL} size={34} ring isYou />
           </a>

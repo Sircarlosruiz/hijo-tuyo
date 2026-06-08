@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { RequireAuth } from '../components/require-auth';
-import { withAuthProvider } from '../components/auth-provider-wrapper';
+import { withAuthProvider, WithActiveGroup } from '../components/auth-provider-wrapper';
 import { AppShell } from '../components/app-shell';
 import { TournamentFixtureList } from '../components/tournament-fixture-list';
 import { TournamentRecordForm } from '../components/tournament-record-form';
@@ -8,6 +8,7 @@ import { TournamentStandings } from '../components/tournament-standings';
 import { TournamentChampionBanner } from '../components/tournament-champion-banner';
 import { Icon } from '../components/ui';
 import { useTournament, useTournamentCreateData, useTournamentPartidos } from '../hooks/use-tournaments';
+import { useActiveGroup } from '../hooks/use-active-group';
 import { computeStandings } from '../lib/standings-computer';
 import { detectCompletion } from '../lib/completion-detector';
 
@@ -18,9 +19,13 @@ function getTournamentId(): string | undefined {
 
 function TournamentDetailContent(): React.JSX.Element {
   const id = getTournamentId();
+  const { activeGroupId, loading: groupLoading } = useActiveGroup();
   const { tournament, loading, error } = useTournament(id ?? '');
   const { players, loading: dataLoading } = useTournamentCreateData();
-  const { partidos, loading: partidosLoading, refresh: refreshPartidos } = useTournamentPartidos(id ?? '');
+  const { partidos, loading: partidosLoading, refresh: refreshPartidos } = useTournamentPartidos(
+    id ?? '',
+    activeGroupId ?? undefined,
+  );
 
   const [recordingFixtureId, setRecordingFixtureId] = useState<string | null>(null);
   const [recordError, setRecordError] = useState<string | null>(null);
@@ -41,7 +46,7 @@ function TournamentDetailContent(): React.JSX.Element {
     setRecordError(null);
   }, []);
 
-  if (loading || dataLoading || partidosLoading) {
+  if (groupLoading || loading || dataLoading || partidosLoading) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingTop: 40 }}>
         <div className="ht-eyebrow">Loading tournament…</div>
@@ -169,6 +174,7 @@ function TournamentDetailContent(): React.JSX.Element {
                 fixture={fixture}
                 tournamentId={tournament.id}
                 gameId={tournament.gameId}
+                groupId={activeGroupId ?? ''}
                 games={[]}
                 players={players}
                 onSuccess={handleRecordSuccess}
@@ -189,9 +195,11 @@ function TournamentDetailContent(): React.JSX.Element {
 function TournamentDetailPageContent(): React.JSX.Element {
   return (
     <RequireAuth>
-      <AppShell activePage="tournaments">
-        <TournamentDetailContent />
-      </AppShell>
+      <WithActiveGroup>
+        <AppShell activePage="tournaments">
+          <TournamentDetailContent />
+        </AppShell>
+      </WithActiveGroup>
     </RequireAuth>
   );
 }
