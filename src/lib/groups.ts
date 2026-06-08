@@ -36,8 +36,6 @@ export async function createGroup(
   }
 
   const db = getFirestoreInstance();
-  const batch = writeBatch(db);
-
   const groupRef = doc(collection(db, 'groups'));
   const membershipRef = doc(groupRef, 'members', uid);
 
@@ -52,19 +50,10 @@ export async function createGroup(
     joinedAt: serverTimestamp() as Timestamp,
   };
 
-  batch.set(groupRef, groupData);
-  batch.set(membershipRef, membershipData);
-
-  const userRef = doc(db, 'usuarios', uid);
-  const userSnap = await getDoc(userRef);
-  if (userSnap.exists()) {
-    const existingGroupIds: string[] = userSnap.data().groupIds || [];
-    if (!existingGroupIds.includes(groupRef.id)) {
-      batch.update(userRef, { groupIds: [...existingGroupIds, groupRef.id] });
-    }
-  }
-
-  await batch.commit();
+  // Sequential writes avoid batch rule-evaluation edge cases between group + membership.
+  await setDoc(groupRef, groupData);
+  await setDoc(membershipRef, membershipData);
+  await syncUserGroupMembership(uid, groupRef.id);
 
   return groupRef.id;
 }
@@ -96,12 +85,26 @@ export async function fetchMyGroups(
   const activeGroupId =
     typeof userData.activeGroupId === 'string' ? userData.activeGroupId : null;
 
-  const groupIds = [
+  let groupIds = [
     ...new Set([
       ...groupIdsFromUser,
       ...(activeGroupId ? [activeGroupId] : []),
     ]),
   ];
+
+  try {
+    const ownedGroupsSnap = await getDocs(
+      query(collection(db, 'groups'), where('ownerUid', '==', uid)),
+    );
+    groupIds = [
+      ...new Set([...groupIds, ...ownedGroupsSnap.docs.map((groupDoc) => groupDoc.id)]),
+    ];
+  } catch (error) {
+    console.error('Failed to load owned groups (non-fatal)', {
+      uid,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
 
   if (groupIds.length === 0) {
     return [];
@@ -109,26 +112,48 @@ export async function fetchMyGroups(
 
   const results: GroupWithMembership[] = [];
 
-  // Use getDoc per group — collection queries on `groups` fail security rules
-  // because isGroupMember() cannot be inferred from query filters alone.
   for (const groupId of groupIds) {
-    const membershipSnap = await getDoc(
-      doc(db, 'groups', groupId, 'members', uid),
-    );
-    if (!membershipSnap.exists()) continue;
+    try {
+      const membershipSnap = await getDoc(
+        doc(db, 'groups', groupId, 'members', uid),
+      );
+      if (!membershipSnap.exists()) continue;
 
-    const groupSnap = await getDoc(doc(db, 'groups', groupId));
-    if (!groupSnap.exists()) continue;
+      const groupSnap = await getDoc(doc(db, 'groups', groupId));
+      if (!groupSnap.exists()) continue;
 
-    const groupData = groupSnap.data() as GroupDoc;
-    const membership = membershipSnap.data() as MembershipDoc;
-    results.push({
-      id: groupSnap.id,
-      name: groupData.name,
-      ownerUid: groupData.ownerUid,
-      createdAt: groupData.createdAt,
-      myRole: membership.role,
-    });
+      const groupData = groupSnap.data() as GroupDoc;
+      const membership = membershipSnap.data() as MembershipDoc;
+      results.push({
+        id: groupSnap.id,
+        name: groupData.name,
+        ownerUid: groupData.ownerUid,
+        createdAt: groupData.createdAt,
+        myRole: membership.role,
+      });
+    } catch (error) {
+      console.error('Skipping group while resolving memberships (non-fatal)', {
+        uid,
+        groupId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  const resolvedGroupIds = results.map((group) => group.id);
+  const sameGroupIds =
+    resolvedGroupIds.length === groupIdsFromUser.length
+    && resolvedGroupIds.every((id) => groupIdsFromUser.includes(id));
+
+  if (resolvedGroupIds.length > 0 && !sameGroupIds) {
+    try {
+      await setDoc(userRef, { groupIds: resolvedGroupIds }, { merge: true });
+    } catch (error) {
+      console.error('Failed to backfill groupIds on user doc (non-fatal)', {
+        uid,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   return results;
@@ -289,11 +314,37 @@ export async function redeemInvite(
 
   // If not already a member, set as active group and update groupIds
   if (!result.alreadyMember) {
-    await setActiveGroup(uid, result.groupId);
-    await addUserToGroupIds(uid, result.groupId);
+    await syncUserGroupMembership(uid, result.groupId);
   }
 
   return result;
+}
+
+async function syncUserGroupMembership(
+  uid: string,
+  groupId: string,
+): Promise<void> {
+  const db = getFirestoreInstance();
+  const userRef = doc(db, 'usuarios', uid);
+  const userSnap = await getDoc(userRef);
+  const existingGroupIds: string[] = userSnap.exists()
+    ? (userSnap.data().groupIds ?? [])
+    : [];
+  const groupIds = existingGroupIds.includes(groupId)
+    ? existingGroupIds
+    : [...existingGroupIds, groupId];
+
+  await setDoc(
+    userRef,
+    { groupIds, activeGroupId: groupId },
+    { merge: true },
+  );
+
+  try {
+    localStorage.setItem('activeGroupId', groupId);
+  } catch {
+    // localStorage may be unavailable — non-critical
+  }
 }
 
 async function addUserToGroupIds(
@@ -303,16 +354,15 @@ async function addUserToGroupIds(
   const db = getFirestoreInstance();
   const userRef = doc(db, 'usuarios', uid);
   const userSnap = await getDoc(userRef);
+  const existingGroupIds: string[] = userSnap.exists()
+    ? (userSnap.data().groupIds ?? [])
+    : [];
 
-  if (userSnap.exists()) {
-    const userData = userSnap.data();
-    const existingGroupIds: string[] = userData.groupIds || [];
-    if (!existingGroupIds.includes(groupId)) {
-      await updateDoc(userRef, {
-        groupIds: [...existingGroupIds, groupId],
-      });
-    }
+  if (existingGroupIds.includes(groupId)) {
+    return;
   }
+
+  await setDoc(userRef, { groupIds: [...existingGroupIds, groupId] }, { merge: true });
 }
 
 export async function regenerateInvite(
@@ -366,16 +416,6 @@ export async function removeMember(
   const batch = writeBatch(db);
   const membershipRef = doc(db, 'groups', groupId, 'members', targetUid);
   batch.delete(membershipRef);
-
-  // Remove from target's groupIds array
-  const userRef = doc(db, 'usuarios', targetUid);
-  batch.update(userRef, { groupIds: arrayRemove(groupId) });
-
-  // If this was their active group, clear it
-  const userSnap = await getDoc(userRef);
-  if (userSnap.exists() && userSnap.data().activeGroupId === groupId) {
-    batch.update(userRef, { activeGroupId: null });
-  }
 
   await batch.commit();
 }
@@ -463,16 +503,29 @@ export async function deleteGroup(
     throw new Error('Only the group owner can delete the group');
   }
 
-  // Fetch all subcollections and scoped docs
-  const [membersSnap, invitesSnap, partidosSnap, torneosSnap] = await Promise.all([
-    getDocs(collection(db, 'groups', groupId, 'members')),
-    getDocs(collection(db, 'groups', groupId, 'invites')),
-    getDocs(query(collection(db, 'partidos'), where('groupId', '==', groupId))),
-    getDocs(query(collection(db, 'torneos'), where('groupId', '==', groupId))),
-  ]);
+  // Fetch scoped docs (members fetched separately for clearer errors)
+  let membersSnap;
+  let invitesSnap;
+  let partidosSnap;
+  let torneosSnap;
+
+  try {
+    [membersSnap, invitesSnap, partidosSnap, torneosSnap] = await Promise.all([
+      getDocs(collection(db, 'groups', groupId, 'members')),
+      getDocs(collection(db, 'groups', groupId, 'invites')),
+      getDocs(query(collection(db, 'partidos'), where('groupId', '==', groupId))),
+      getDocs(query(collection(db, 'torneos'), where('groupId', '==', groupId))),
+    ]);
+  } catch (error) {
+    throw new Error(
+      `Failed to load group data for deletion: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
 
   // Batch delete in chunks of 500 (Firestore limit)
-  async function batchDelete(refs: DocumentReference[]): Promise<void> {
+  async function batchDelete(label: string, refs: DocumentReference[]): Promise<void> {
+    if (refs.length === 0) return;
+
     const chunks: DocumentReference[][] = [];
     for (let i = 0; i < refs.length; i += 500) {
       chunks.push(refs.slice(i, i + 500));
@@ -482,29 +535,57 @@ export async function deleteGroup(
       for (const ref of chunk) {
         batch.delete(ref);
       }
-      await batch.commit();
+      try {
+        await batch.commit();
+      } catch (error) {
+        throw new Error(
+          `Failed to delete ${label}: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
     }
   }
 
-  // Delete members (also remove from their groupIds)
-  const memberUids = membersSnap.docs.map((d) => d.id);
-  for (const memberUid of memberUids) {
-    const userRef = doc(db, 'usuarios', memberUid);
-    const batch = writeBatch(db);
-    batch.update(userRef, {
-      groupIds: arrayRemove(groupId),
-      activeGroupId: null,
-    });
-    await batch.commit();
+  await batchDelete('matches', partidosSnap.docs.map((d) => d.ref));
+  await batchDelete('tournaments', torneosSnap.docs.map((d) => d.ref));
+  await batchDelete('invites', invitesSnap.docs.map((d) => d.ref));
+
+  // Delete group doc while owner membership still exists (isGroupOwner still valid)
+  try {
+    await deleteDoc(doc(db, 'groups', groupId));
+  } catch (error) {
+    throw new Error(
+      `Failed to delete group document: ${error instanceof Error ? error.message : String(error)}`,
+    );
   }
 
-  await batchDelete(membersSnap.docs.map((d) => d.ref));
-  await batchDelete(invitesSnap.docs.map((d) => d.ref));
-  await batchDelete(partidosSnap.docs.map((d) => d.ref));
-  await batchDelete(torneosSnap.docs.map((d) => d.ref));
+  await batchDelete('members', membersSnap.docs.map((d) => d.ref));
 
-  // Delete the group doc itself
-  await deleteDoc(doc(db, 'groups', groupId));
+  // Only the caller can update their own user doc per security rules
+  const callerRef = doc(db, 'usuarios', uid);
+  const callerSnap = await getDoc(callerRef);
+  if (callerSnap.exists()) {
+    try {
+      const updates: Record<string, unknown> = {
+        groupIds: arrayRemove(groupId),
+      };
+      if (callerSnap.data().activeGroupId === groupId) {
+        updates.activeGroupId = null;
+      }
+      await updateDoc(callerRef, updates);
+    } catch (error) {
+      console.error('Failed to sync user doc after group delete (non-fatal)', {
+        uid,
+        groupId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  try {
+    localStorage.removeItem('activeGroupId');
+  } catch {
+    // Non-critical
+  }
 
   return {
     membersRemoved: membersSnap.size,

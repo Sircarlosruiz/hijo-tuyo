@@ -63,11 +63,12 @@ export function GroupSettingsPanel({
 
     setActionLoading(true);
     try {
-      const result = await deleteGroup(groupId, user.uid);
-      console.log('Group deleted:', result);
+      await deleteGroup(groupId, user.uid);
       window.location.href = '/groups';
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete group');
+      const message = err instanceof Error ? err.message : 'Failed to delete group';
+      console.error('Failed to delete group', { groupId, uid: user.uid, error: message });
+      setError(message);
       setActionLoading(false);
     }
   }

@@ -67,31 +67,23 @@ describe('createGroup', () => {
     await expect(createGroup('uid-1', '   ')).rejects.toThrow('Group name cannot be empty');
   });
 
-  it('should create group and membership atomically', async () => {
-    const mockBatch = {
-      set: vi.fn(),
-      update: vi.fn(),
-      commit: vi.fn(),
-    };
-    vi.mocked(writeBatch).mockReturnValue(mockBatch as never);
-
+  it('should create group and owner membership', async () => {
     const mockGroupRef = { id: 'group-1' };
     const mockMembershipRef = { path: 'groups/group-1/members/uid-1' };
 
     vi.mocked(doc)
       .mockReturnValueOnce(mockGroupRef as never)
-      .mockReturnValueOnce(mockMembershipRef as never)
-      .mockReturnValueOnce({ path: 'usuarios/uid-1' } as never);
+      .mockReturnValueOnce(mockMembershipRef as never);
 
+    vi.mocked(setDoc).mockResolvedValue(undefined as never);
     vi.mocked(getDoc).mockResolvedValue({
-      exists: () => true,
-      data: () => ({ groupIds: [] }),
+      exists: () => false,
+      data: () => ({}),
     } as never);
 
     const groupId = await createGroup('uid-1', 'Test Group');
 
-    expect(mockBatch.set).toHaveBeenCalledTimes(2);
-    expect(mockBatch.commit).toHaveBeenCalledTimes(1);
+    expect(setDoc).toHaveBeenCalledTimes(3);
     expect(groupId).toBe('group-1');
   });
 });

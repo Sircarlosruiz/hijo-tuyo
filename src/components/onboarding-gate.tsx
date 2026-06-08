@@ -16,7 +16,7 @@ export function OnboardingGate({ inviteCode }: OnboardingGateProps): React.JSX.E
       <div className="ht-onboarding">
         <CreateGroupForm
           onSuccess={() => {
-            window.location.href = '/dashboard';
+            window.location.href = '/groups';
           }}
         />
         <p className="ht-onboarding-back">
@@ -38,7 +38,7 @@ export function OnboardingGate({ inviteCode }: OnboardingGateProps): React.JSX.E
         <JoinGroupForm
           initialCode={inviteCode}
           onSuccess={() => {
-            window.location.href = '/dashboard';
+            window.location.href = '/groups';
           }}
         />
         {!inviteCode && (

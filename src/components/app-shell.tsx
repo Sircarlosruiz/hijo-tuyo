@@ -7,13 +7,14 @@ import { GroupSwitcher } from './group-switcher';
 
 interface AppShellProps {
   children: ReactNode;
-  activePage: 'dashboard' | 'log' | 'tournaments' | 'profile';
+  activePage: 'dashboard' | 'log' | 'tournaments' | 'groups' | 'profile';
 }
 
 const NAV = [
   { key: 'dashboard' as const, icon: 'standings', label: 'Standings', href: '/dashboard' },
   { key: 'log' as const,       icon: 'plus',      label: 'Log Match',  href: '/match-entry' },
   { key: 'tournaments' as const, icon: 'trophy',  label: 'Tournaments', href: '/tournaments' },
+  { key: 'groups' as const,    icon: 'users',     label: 'Groups',     href: '/groups' },
   { key: 'profile' as const,   icon: 'user',      label: 'Profile',    href: '/profile' },
 ];
 

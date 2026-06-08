@@ -1,6 +1,5 @@
 import { useState, type FormEvent } from 'react';
 import { useAuth } from '../hooks/use-auth';
-import { useActiveGroup } from '../hooks/use-active-group';
 import { createGroup } from '../lib/groups';
 
 interface CreateGroupFormProps {
@@ -9,7 +8,6 @@ interface CreateGroupFormProps {
 
 export function CreateGroupForm({ onSuccess }: CreateGroupFormProps): React.JSX.Element {
   const { user } = useAuth();
-  const { setActiveGroup } = useActiveGroup();
   const [name, setName] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState<boolean>(false);
@@ -32,10 +30,11 @@ export function CreateGroupForm({ onSuccess }: CreateGroupFormProps): React.JSX.
 
     try {
       const groupId = await createGroup(user.uid, name);
-      await setActiveGroup(groupId);
       onSuccess?.(groupId);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create group');
+      const message = err instanceof Error ? err.message : 'Failed to create group';
+      console.error('Failed to create group', { uid: user.uid, name, error: message });
+      setError(message);
     } finally {
       setSubmitting(false);
     }

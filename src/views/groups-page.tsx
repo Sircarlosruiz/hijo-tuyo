@@ -119,7 +119,7 @@ function GroupsPageWithGroupGate(): React.JSX.Element {
           <RequireGroup
             onNoGroups={() => <OnboardingGate />}
           >
-            <AppShell activePage="dashboard">
+            <AppShell activePage="groups">
               <GroupsPageContent />
             </AppShell>
           </RequireGroup>
