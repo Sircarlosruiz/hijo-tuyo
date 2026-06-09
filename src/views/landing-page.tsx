@@ -4,13 +4,15 @@ import { SignInButton } from '../components/sign-in-button';
 import { AuthLoading } from '../components/auth-loading';
 import { withAuthProvider } from '../components/auth-provider-wrapper';
 import { BrandMark } from '../components/ui';
+import { getStoredRedirectUrl } from '../lib/auth-redirect';
 
 function LandingPageContent(): React.JSX.Element {
   const { user, loading } = useAuth();
 
   useEffect(() => {
     if (!loading && user) {
-      window.location.href = '/dashboard';
+      const redirect = getStoredRedirectUrl();
+      window.location.href = redirect ?? '/dashboard';
     }
   }, [loading, user]);
 

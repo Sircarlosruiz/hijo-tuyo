@@ -1,6 +1,7 @@
-import { useState, type FormEvent, useEffect } from 'react';
+import { useState, type FormEvent, useEffect, useRef } from 'react';
 import { useAuth } from '../hooks/use-auth';
 import { redeemInvite } from '../lib/groups';
+import { syncUserToFirestore } from '../lib/firestore-user-sync';
 
 interface JoinGroupFormProps {
   initialCode?: string;
@@ -17,6 +18,7 @@ export function JoinGroupForm({
   const [success, setSuccess] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [alreadyMember, setAlreadyMember] = useState<boolean>(false);
+  const autoRedeemAttempted = useRef<boolean>(false);
 
   useEffect(() => {
     if (initialCode) {
@@ -24,34 +26,35 @@ export function JoinGroupForm({
     }
   }, [initialCode]);
 
-  async function handleSubmit(e: FormEvent): Promise<void> {
-    e.preventDefault();
-    setError(null);
-    setSuccess(null);
-    setAlreadyMember(false);
-
+  async function redeemCode(inviteCode: string): Promise<void> {
     if (!user) {
       setError('You must be signed in to join a group');
       return;
     }
 
-    if (!code.trim()) {
+    const normalizedCode = inviteCode.trim().toUpperCase();
+    if (!normalizedCode) {
       setError('Invite code cannot be empty');
       return;
     }
 
     setSubmitting(true);
+    setError(null);
+    setSuccess(null);
+    setAlreadyMember(false);
 
     try {
-      const result = await redeemInvite(code.trim().toUpperCase(), user.uid);
+      await syncUserToFirestore(user);
+      const result = await redeemInvite(normalizedCode, user.uid, user);
 
       if (result.alreadyMember) {
         setAlreadyMember(true);
         setSuccess('You are already a member of this group!');
       } else {
         setSuccess('You joined the group successfully!');
-        onSuccess?.(result.groupId);
       }
+
+      onSuccess?.(result.groupId);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to join group';
       console.error('Failed to redeem invite', { uid: user.uid, error: message });
@@ -59,6 +62,20 @@ export function JoinGroupForm({
     } finally {
       setSubmitting(false);
     }
+  }
+
+  useEffect(() => {
+    if (!user || !initialCode?.trim() || autoRedeemAttempted.current) {
+      return;
+    }
+
+    autoRedeemAttempted.current = true;
+    void redeemCode(initialCode);
+  }, [user, initialCode]);
+
+  async function handleSubmit(e: FormEvent): Promise<void> {
+    e.preventDefault();
+    await redeemCode(code);
   }
 
   return (

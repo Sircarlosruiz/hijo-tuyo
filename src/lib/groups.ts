@@ -16,7 +16,9 @@ import {
   arrayRemove,
   type DocumentReference,
 } from 'firebase/firestore';
+import type { User } from 'firebase/auth';
 import { getFirestoreInstance } from './firebase-client';
+import { syncUserToFirestore } from './firestore-user-sync';
 import type {
   GroupDoc,
   MembershipDoc,
@@ -48,6 +50,7 @@ export async function createGroup(
   const membershipData: MembershipDoc = {
     role: 'owner',
     joinedAt: serverTimestamp() as Timestamp,
+    uid,
   };
 
   // Sequential writes avoid batch rule-evaluation edge cases between group + membership.
@@ -101,6 +104,23 @@ export async function fetchMyGroups(
     ];
   } catch (error) {
     console.error('Failed to load owned groups (non-fatal)', {
+      uid,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+
+  try {
+    const membershipSnap = await getDocs(
+      query(collectionGroup(db, 'members'), where('uid', '==', uid)),
+    );
+    groupIds = [
+      ...new Set([
+        ...groupIds,
+        ...membershipSnap.docs.map((memberDoc) => memberDoc.ref.path.split('/')[1]),
+      ]),
+    ];
+  } catch (error) {
+    console.error('Failed to load memberships (non-fatal)', {
       uid,
       error: error instanceof Error ? error.message : String(error),
     });
@@ -249,6 +269,7 @@ export async function fetchGroupInvites(
 export async function redeemInvite(
   inviteCode: string,
   uid: string,
+  firebaseUser?: User | null,
 ): Promise<{ groupId: string; alreadyMember: boolean }> {
   const db = getFirestoreInstance();
   const normalizedCode = inviteCode.trim().toUpperCase();
@@ -298,6 +319,7 @@ export async function redeemInvite(
     const membershipData: MembershipDoc = {
       role: 'member',
       joinedAt: serverTimestamp() as Timestamp,
+      uid,
     };
 
     transaction.set(membershipRef, membershipData);
@@ -308,10 +330,7 @@ export async function redeemInvite(
     return { groupId, alreadyMember: false };
   });
 
-  // If not already a member, set as active group and update groupIds
-  if (!result.alreadyMember) {
-    await syncUserGroupMembership(uid, result.groupId);
-  }
+  await syncUserGroupMembership(uid, result.groupId, firebaseUser);
 
   return result;
 }
@@ -319,22 +338,30 @@ export async function redeemInvite(
 async function syncUserGroupMembership(
   uid: string,
   groupId: string,
+  firebaseUser?: User | null,
 ): Promise<void> {
   const db = getFirestoreInstance();
   const userRef = doc(db, 'usuarios', uid);
-  const userSnap = await getDoc(userRef);
-  const existingGroupIds: string[] = userSnap.exists()
-    ? (userSnap.data().groupIds ?? [])
-    : [];
+  let userSnap = await getDoc(userRef);
+
+  if (!userSnap.exists()) {
+    if (firebaseUser?.uid === uid) {
+      await syncUserToFirestore(firebaseUser);
+    } else {
+      throw new Error('User profile is not ready yet. Please try again.');
+    }
+    userSnap = await getDoc(userRef);
+    if (!userSnap.exists()) {
+      throw new Error('Could not sync user profile. Please try again.');
+    }
+  }
+
+  const existingGroupIds: string[] = userSnap.data().groupIds ?? [];
   const groupIds = existingGroupIds.includes(groupId)
     ? existingGroupIds
     : [...existingGroupIds, groupId];
 
-  await setDoc(
-    userRef,
-    { groupIds, activeGroupId: groupId },
-    { merge: true },
-  );
+  await updateDoc(userRef, { groupIds, activeGroupId: groupId });
 
   try {
     localStorage.setItem('activeGroupId', groupId);

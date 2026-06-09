@@ -9,6 +9,7 @@ export interface GroupDoc {
 export interface MembershipDoc {
   role: 'owner' | 'member';
   joinedAt: Timestamp;
+  uid?: string;
 }
 
 export interface InviteDoc {

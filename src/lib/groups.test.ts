@@ -25,6 +25,10 @@ vi.mock('firebase/firestore', () => ({
   deleteDoc: vi.fn(),
 }));
 
+vi.mock('../lib/firestore-user-sync', () => ({
+  syncUserToFirestore: vi.fn().mockResolvedValue(undefined),
+}));
+
 vi.mock('../lib/firebase-client', () => ({
   getFirestoreInstance: vi.fn(() => ({})),
 }));
@@ -76,14 +80,16 @@ describe('createGroup', () => {
       .mockReturnValueOnce(mockMembershipRef as never);
 
     vi.mocked(setDoc).mockResolvedValue(undefined as never);
+    vi.mocked(updateDoc).mockResolvedValue(undefined as never);
     vi.mocked(getDoc).mockResolvedValue({
-      exists: () => false,
-      data: () => ({}),
+      exists: () => true,
+      data: () => ({ groupIds: [] }),
     } as never);
 
     const groupId = await createGroup('uid-1', 'Test Group');
 
-    expect(setDoc).toHaveBeenCalledTimes(3);
+    expect(setDoc).toHaveBeenCalledTimes(2);
+    expect(updateDoc).toHaveBeenCalledTimes(1);
     expect(groupId).toBe('group-1');
   });
 });
@@ -220,12 +226,31 @@ describe('redeemInvite', () => {
 
     vi.mocked(runTransaction).mockImplementation(async (_db, fn) => {
       const mockTransaction = {
-        get: vi.fn().mockResolvedValue({ exists: () => true } as never),
+        get: vi.fn()
+          .mockResolvedValueOnce({
+            exists: () => true,
+            data: () => ({
+              code: 'VALIDCODE',
+              revoked: false,
+              maxUses: null,
+              uses: 0,
+              expiresAt: null,
+            }),
+          } as never)
+          .mockResolvedValueOnce({
+            exists: () => true,
+          } as never),
         set: vi.fn(),
         update: vi.fn(),
       };
       return fn(mockTransaction);
     });
+
+    vi.mocked(getDoc).mockResolvedValue({
+      exists: () => true,
+      data: () => ({ groupIds: [] }),
+    } as never);
+    vi.mocked(updateDoc).mockResolvedValue(undefined as never);
 
     const result = await redeemInvite('VALIDCODE', 'uid-1');
 
