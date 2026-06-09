@@ -1,6 +1,5 @@
 import {
   collection,
-  collectionGroup,
   doc,
   setDoc,
   getDoc,
@@ -104,23 +103,6 @@ export async function fetchMyGroups(
     ];
   } catch (error) {
     console.error('Failed to load owned groups (non-fatal)', {
-      uid,
-      error: error instanceof Error ? error.message : String(error),
-    });
-  }
-
-  try {
-    const membershipSnap = await getDocs(
-      query(collectionGroup(db, 'members'), where('uid', '==', uid)),
-    );
-    groupIds = [
-      ...new Set([
-        ...groupIds,
-        ...membershipSnap.docs.map((memberDoc) => memberDoc.ref.path.split('/')[1]),
-      ]),
-    ];
-  } catch (error) {
-    console.error('Failed to load memberships (non-fatal)', {
       uid,
       error: error instanceof Error ? error.message : String(error),
     });
@@ -233,6 +215,10 @@ export async function createInvite(
 
   const inviteRef = doc(collection(db, 'groups', groupId, 'invites'));
   await setDoc(inviteRef, inviteData);
+  await setDoc(doc(db, 'inviteCodes', code), {
+    groupId,
+    inviteId: inviteRef.id,
+  });
 
   return { ...inviteData, inviteId: inviteRef.id };
 }
@@ -250,7 +236,13 @@ export async function revokeInvite(
   }
 
   const inviteRef = doc(db, 'groups', groupId, 'invites', inviteId);
+  const inviteSnap = await getDoc(inviteRef);
   await updateDoc(inviteRef, { revoked: true });
+
+  if (inviteSnap.exists()) {
+    const code = (inviteSnap.data() as InviteDoc).code;
+    await deleteDoc(doc(db, 'inviteCodes', code));
+  }
 }
 
 export async function fetchGroupInvites(
@@ -266,28 +258,58 @@ export async function fetchGroupInvites(
   })) as Array<InviteDoc & { inviteId: string }>;
 }
 
+async function resolveInviteRef(
+  normalizedCode: string,
+  groupIdHint?: string,
+): Promise<{ inviteRef: DocumentReference; groupId: string }> {
+  const db = getFirestoreInstance();
+
+  if (groupIdHint) {
+    const invitesSnapshot = await getDocs(
+      query(
+        collection(db, 'groups', groupIdHint, 'invites'),
+        where('code', '==', normalizedCode),
+      ),
+    );
+    if (!invitesSnapshot.empty) {
+      return {
+        inviteRef: invitesSnapshot.docs[0].ref,
+        groupId: groupIdHint,
+      };
+    }
+  }
+
+  const mappingSnap = await getDoc(doc(db, 'inviteCodes', normalizedCode));
+  if (mappingSnap.exists()) {
+    const { groupId, inviteId } = mappingSnap.data() as {
+      groupId: string;
+      inviteId: string;
+    };
+    return {
+      inviteRef: doc(db, 'groups', groupId, 'invites', inviteId),
+      groupId,
+    };
+  }
+
+  throw new Error('Invalid invite code');
+}
+
 export async function redeemInvite(
   inviteCode: string,
   uid: string,
   firebaseUser?: User | null,
+  groupIdHint?: string,
 ): Promise<{ groupId: string; alreadyMember: boolean }> {
   const db = getFirestoreInstance();
   const normalizedCode = inviteCode.trim().toUpperCase();
 
-  const invitesSnapshot = await getDocs(
-    query(collectionGroup(db, 'invites'), where('code', '==', normalizedCode)),
+  const { inviteRef: inviteDoc, groupId } = await resolveInviteRef(
+    normalizedCode,
+    groupIdHint,
   );
 
-  if (invitesSnapshot.empty) {
-    throw new Error('Invalid invite code');
-  }
-
-  const inviteDoc = invitesSnapshot.docs[0];
-  const parts = inviteDoc.ref.path.split('/');
-  const groupId = parts[1];
-
   const result = await runTransaction(db, async (transaction) => {
-    const freshInviteSnap = await transaction.get(inviteDoc.ref);
+    const freshInviteSnap = await transaction.get(inviteDoc);
     if (!freshInviteSnap.exists()) {
       throw new Error('Invalid invite code');
     }
@@ -323,7 +345,7 @@ export async function redeemInvite(
     };
 
     transaction.set(membershipRef, membershipData);
-    transaction.update(inviteDoc.ref, {
+    transaction.update(inviteDoc, {
       uses: inviteData.uses + 1,
     });
 
@@ -361,7 +383,7 @@ async function syncUserGroupMembership(
     ? existingGroupIds
     : [...existingGroupIds, groupId];
 
-  await updateDoc(userRef, { groupIds, activeGroupId: groupId });
+  await setDoc(userRef, { groupIds, activeGroupId: groupId }, { merge: true });
 
   try {
     localStorage.setItem('activeGroupId', groupId);
@@ -401,11 +423,15 @@ export async function regenerateInvite(
     throw new Error('Only the group owner can regenerate invites');
   }
 
-  // Revoke old invite
   const oldInviteRef = doc(db, 'groups', groupId, 'invites', oldInviteId);
+  const oldInviteSnap = await getDoc(oldInviteRef);
   await updateDoc(oldInviteRef, { revoked: true });
 
-  // Create new invite
+  if (oldInviteSnap.exists()) {
+    const oldCode = (oldInviteSnap.data() as InviteDoc).code;
+    await deleteDoc(doc(db, 'inviteCodes', oldCode));
+  }
+
   return createInvite(groupId, uid, options);
 }
 
@@ -571,6 +597,12 @@ export async function deleteGroup(
   await batchDelete('matches', partidosSnap.docs.map((d) => d.ref));
   await batchDelete('tournaments', torneosSnap.docs.map((d) => d.ref));
   await batchDelete('invites', invitesSnap.docs.map((d) => d.ref));
+  await batchDelete(
+    'invite code mappings',
+    invitesSnap.docs.map((d) =>
+      doc(db, 'inviteCodes', (d.data() as InviteDoc).code),
+    ),
+  );
 
   // Delete group doc while owner membership still exists (isGroupOwner still valid)
   try {

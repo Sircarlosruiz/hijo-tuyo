@@ -88,8 +88,7 @@ describe('createGroup', () => {
 
     const groupId = await createGroup('uid-1', 'Test Group');
 
-    expect(setDoc).toHaveBeenCalledTimes(2);
-    expect(updateDoc).toHaveBeenCalledTimes(1);
+    expect(setDoc).toHaveBeenCalledTimes(3);
     expect(groupId).toBe('group-1');
   });
 });
@@ -205,24 +204,17 @@ describe('revokeInvite', () => {
 
 describe('redeemInvite', () => {
   it('should throw for invalid invite code', async () => {
+    vi.mocked(getDoc).mockResolvedValue({ exists: () => false } as never);
     vi.mocked(getDocs).mockResolvedValue({ empty: true, docs: [] } as never);
 
     await expect(redeemInvite('INVALID', 'uid-1')).rejects.toThrow('Invalid invite code');
   });
 
   it('should return alreadyMember if user is already in group', async () => {
-    const mockInviteDoc = {
-      ref: { path: 'groups/group-1/invites/invite-1' },
-      data: () => ({
-        code: 'VALIDCODE',
-        revoked: false,
-        maxUses: null,
-        uses: 0,
-        expiresAt: null,
-      }),
-    };
-
-    vi.mocked(getDocs).mockResolvedValue({ empty: false, docs: [mockInviteDoc] } as never);
+    vi.mocked(getDoc).mockResolvedValue({
+      exists: () => true,
+      data: () => ({ groupId: 'group-1', inviteId: 'invite-1' }),
+    } as never);
 
     vi.mocked(runTransaction).mockImplementation(async (_db, fn) => {
       const mockTransaction = {
@@ -246,11 +238,7 @@ describe('redeemInvite', () => {
       return fn(mockTransaction);
     });
 
-    vi.mocked(getDoc).mockResolvedValue({
-      exists: () => true,
-      data: () => ({ groupIds: [] }),
-    } as never);
-    vi.mocked(updateDoc).mockResolvedValue(undefined as never);
+    vi.mocked(setDoc).mockResolvedValue(undefined as never);
 
     const result = await redeemInvite('VALIDCODE', 'uid-1');
 

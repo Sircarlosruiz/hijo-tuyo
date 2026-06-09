@@ -48,7 +48,7 @@ export function InviteManager({ groupId, uid }: InviteManagerProps): React.JSX.E
   }
 
   function getInviteLink(code: string): string {
-    return `${window.location.origin}/groups/join?code=${code}`;
+    return `${window.location.origin}/groups/join?group=${groupId}&code=${code}`;
   }
 
   async function copyToClipboard(text: string, inviteId: string): Promise<void> {

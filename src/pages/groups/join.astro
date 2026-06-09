@@ -3,8 +3,9 @@ import Layout from '../../layouts/Layout.astro';
 import { JoinGroupPage } from '../../views/join-group-page';
 
 const code = Astro.url.searchParams.get('code') ?? undefined;
+const group = Astro.url.searchParams.get('group') ?? undefined;
 ---
 
 <Layout title="Join Group">
-  <JoinGroupPage code={code} client:load />
+  <JoinGroupPage code={code} groupId={group} client:load />
 </Layout>

@@ -5,11 +5,13 @@ import { syncUserToFirestore } from '../lib/firestore-user-sync';
 
 interface JoinGroupFormProps {
   initialCode?: string;
+  groupId?: string;
   onSuccess?: (groupId: string) => void;
 }
 
 export function JoinGroupForm({
   initialCode,
+  groupId,
   onSuccess,
 }: JoinGroupFormProps): React.JSX.Element {
   const { user } = useAuth();
@@ -45,7 +47,7 @@ export function JoinGroupForm({
 
     try {
       await syncUserToFirestore(user);
-      const result = await redeemInvite(normalizedCode, user.uid, user);
+      const result = await redeemInvite(normalizedCode, user.uid, user, groupId);
 
       if (result.alreadyMember) {
         setAlreadyMember(true);
@@ -57,7 +59,13 @@ export function JoinGroupForm({
       onSuccess?.(result.groupId);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to join group';
-      console.error('Failed to redeem invite', { uid: user.uid, error: message });
+      console.error('Failed to redeem invite', {
+        uid: user.uid,
+        groupId,
+        code: normalizedCode,
+        error: message,
+        raw: err,
+      });
       setError(message);
     } finally {
       setSubmitting(false);
