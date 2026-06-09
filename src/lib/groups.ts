@@ -251,30 +251,28 @@ export async function redeemInvite(
   uid: string,
 ): Promise<{ groupId: string; alreadyMember: boolean }> {
   const db = getFirestoreInstance();
+  const normalizedCode = inviteCode.trim().toUpperCase();
+
+  const invitesSnapshot = await getDocs(
+    query(collectionGroup(db, 'invites'), where('code', '==', normalizedCode)),
+  );
+
+  if (invitesSnapshot.empty) {
+    throw new Error('Invalid invite code');
+  }
+
+  const inviteDoc = invitesSnapshot.docs[0];
+  const parts = inviteDoc.ref.path.split('/');
+  const groupId = parts[1];
 
   const result = await runTransaction(db, async (transaction) => {
-    // Find the invite by code — we need to search all groups
-    // For efficiency, we store invites as a subcollection per group
-    // We'll use a collectionGroup query to find by code
-    const invitesQuery = query(
-      collectionGroup(db, 'invites'),
-      where('code', '==', inviteCode),
-    );
-
-    const invitesSnapshot = await getDocs(invitesQuery);
-
-    if (invitesSnapshot.empty) {
+    const freshInviteSnap = await transaction.get(inviteDoc.ref);
+    if (!freshInviteSnap.exists()) {
       throw new Error('Invalid invite code');
     }
 
-    const inviteDoc = invitesSnapshot.docs[0];
-    const inviteData = inviteDoc.data() as InviteDoc;
+    const inviteData = freshInviteSnap.data() as InviteDoc;
 
-    // Extract groupId from path: groups/{groupId}/invites/{inviteId}
-    const parts = inviteDoc.ref.path.split('/');
-    const groupId = parts[1];
-
-    // Check if already a member
     const membershipRef = doc(db, 'groups', groupId, 'members', uid);
     const membershipSnap = await transaction.get(membershipRef);
 
@@ -282,7 +280,6 @@ export async function redeemInvite(
       return { groupId, alreadyMember: true };
     }
 
-    // Validate invite
     if (inviteData.revoked) {
       throw new Error('This invite has been revoked');
     }
@@ -298,7 +295,6 @@ export async function redeemInvite(
       }
     }
 
-    // Create membership and increment invite uses atomically
     const membershipData: MembershipDoc = {
       role: 'member',
       joinedAt: serverTimestamp() as Timestamp,

@@ -53,7 +53,9 @@ export function JoinGroupForm({
         onSuccess?.(result.groupId);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to join group');
+      const message = err instanceof Error ? err.message : 'Failed to join group';
+      console.error('Failed to redeem invite', { uid: user.uid, error: message });
+      setError(message);
     } finally {
       setSubmitting(false);
     }
