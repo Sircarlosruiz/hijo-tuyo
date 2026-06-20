@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { doc, getDoc, getDocs, updateDoc, collection, query, where } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
 import { RequireAuth } from '../components/require-auth';
+import { RequireGroup } from '../components/require-group';
+import { OnboardingGate } from '../components/onboarding-gate';
 import { withAuthProvider, WithActiveGroup } from '../components/auth-provider-wrapper';
 import { AppShell } from '../components/app-shell';
 import { SignOutButton } from '../components/sign-out-button';
@@ -284,9 +286,11 @@ function ProfilePageContent(): React.JSX.Element {
   return (
     <RequireAuth>
       <WithActiveGroup>
-        <AppShell activePage="profile">
-          <ProfileContent />
-        </AppShell>
+        <RequireGroup onNoGroups={() => <OnboardingGate />}>
+          <AppShell activePage="profile">
+            <ProfileContent />
+          </AppShell>
+        </RequireGroup>
       </WithActiveGroup>
     </RequireAuth>
   );

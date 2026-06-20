@@ -1,4 +1,6 @@
 import { RequireAuth } from '../components/require-auth';
+import { RequireGroup } from '../components/require-group';
+import { OnboardingGate } from '../components/onboarding-gate';
 import { withAuthProvider, WithActiveGroup } from '../components/auth-provider-wrapper';
 import { AppShell } from '../components/app-shell';
 import { TournamentList } from '../components/tournament-list';
@@ -42,9 +44,11 @@ function TournamentsListPageContent(): React.JSX.Element {
   return (
     <RequireAuth>
       <WithActiveGroup>
-        <AppShell activePage="tournaments">
-          <TournamentsListContent />
-        </AppShell>
+        <RequireGroup onNoGroups={() => <OnboardingGate />}>
+          <AppShell activePage="tournaments">
+            <TournamentsListContent />
+          </AppShell>
+        </RequireGroup>
       </WithActiveGroup>
     </RequireAuth>
   );

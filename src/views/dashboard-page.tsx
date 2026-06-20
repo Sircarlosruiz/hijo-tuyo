@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { RequireAuth } from '../components/require-auth';
+import { RequireGroup } from '../components/require-group';
+import { OnboardingGate } from '../components/onboarding-gate';
 import { withAuthProvider, WithActiveGroup } from '../components/auth-provider-wrapper';
 import { AppShell } from '../components/app-shell';
 import { GameFilter } from '../components/game-filter';
@@ -97,9 +99,11 @@ function DashboardPageContent(): React.JSX.Element {
   return (
     <RequireAuth>
       <WithActiveGroup>
-        <AppShell activePage="dashboard">
-          <DashboardContent />
-        </AppShell>
+        <RequireGroup onNoGroups={() => <OnboardingGate />}>
+          <AppShell activePage="dashboard">
+            <DashboardContent />
+          </AppShell>
+        </RequireGroup>
       </WithActiveGroup>
     </RequireAuth>
   );

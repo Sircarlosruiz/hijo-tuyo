@@ -596,13 +596,19 @@ export async function deleteGroup(
 
   await batchDelete('matches', partidosSnap.docs.map((d) => d.ref));
   await batchDelete('tournaments', torneosSnap.docs.map((d) => d.ref));
+
+  const inviteCodeRefs: DocumentReference[] = [];
+  for (const inviteDoc of invitesSnap.docs) {
+    const code = (inviteDoc.data() as InviteDoc).code;
+    const mappingRef = doc(db, 'inviteCodes', code);
+    const mappingSnap = await getDoc(mappingRef);
+    if (mappingSnap.exists()) {
+      inviteCodeRefs.push(mappingRef);
+    }
+  }
+
   await batchDelete('invites', invitesSnap.docs.map((d) => d.ref));
-  await batchDelete(
-    'invite code mappings',
-    invitesSnap.docs.map((d) =>
-      doc(db, 'inviteCodes', (d.data() as InviteDoc).code),
-    ),
-  );
+  await batchDelete('invite code mappings', inviteCodeRefs);
 
   // Delete group doc while owner membership still exists (isGroupOwner still valid)
   try {

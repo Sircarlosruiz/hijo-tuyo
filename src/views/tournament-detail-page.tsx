@@ -1,5 +1,7 @@
 import { useState, useCallback } from 'react';
 import { RequireAuth } from '../components/require-auth';
+import { RequireGroup } from '../components/require-group';
+import { OnboardingGate } from '../components/onboarding-gate';
 import { withAuthProvider, WithActiveGroup } from '../components/auth-provider-wrapper';
 import { AppShell } from '../components/app-shell';
 import { TournamentFixtureList } from '../components/tournament-fixture-list';
@@ -196,9 +198,11 @@ function TournamentDetailPageContent(): React.JSX.Element {
   return (
     <RequireAuth>
       <WithActiveGroup>
-        <AppShell activePage="tournaments">
-          <TournamentDetailContent />
-        </AppShell>
+        <RequireGroup onNoGroups={() => <OnboardingGate />}>
+          <AppShell activePage="tournaments">
+            <TournamentDetailContent />
+          </AppShell>
+        </RequireGroup>
       </WithActiveGroup>
     </RequireAuth>
   );

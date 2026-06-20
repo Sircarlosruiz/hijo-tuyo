@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { collection, getDocs, addDoc, serverTimestamp, query, where, type QueryDocumentSnapshot, type DocumentData } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
 import { RequireAuth } from '../components/require-auth';
+import { RequireGroup } from '../components/require-group';
+import { OnboardingGate } from '../components/onboarding-gate';
 import { withAuthProvider, WithActiveGroup } from '../components/auth-provider-wrapper';
 import { AppShell } from '../components/app-shell';
 import { AddGameModal } from '../components/add-game-modal';
@@ -323,9 +325,11 @@ function MatchEntryPageContent(): React.JSX.Element {
   return (
     <RequireAuth>
       <WithActiveGroup>
-        <AppShell activePage="log">
-          <MatchEntryContent />
-        </AppShell>
+        <RequireGroup onNoGroups={() => <OnboardingGate />}>
+          <AppShell activePage="log">
+            <MatchEntryContent />
+          </AppShell>
+        </RequireGroup>
       </WithActiveGroup>
     </RequireAuth>
   );

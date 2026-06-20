@@ -53,6 +53,20 @@ export function GroupSwitcher({ className }: GroupSwitcherProps): React.JSX.Elem
           ))}
         </ul>
       )}
+
+      {open && (
+        <div className="ht-group-switcher-footer">
+          <button
+            type="button"
+            className="ht-group-switcher-item ht-group-switcher-create"
+            onClick={() => {
+              window.location.href = '/groups/new';
+            }}
+          >
+            <span className="ht-group-switcher-item-name">+ Create new group</span>
+          </button>
+        </div>
+      )}
     </div>
   );
 }
