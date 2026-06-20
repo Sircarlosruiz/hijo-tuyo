@@ -37,6 +37,8 @@ export function AppShell({ children, activePage }: AppShellProps): React.JSX.Ele
           </div>
         </div>
 
+        <GroupSwitcher className="ht-sidebar-switcher" />
+
         <nav className="ht-nav">
           {NAV.map((n) => (
             <a

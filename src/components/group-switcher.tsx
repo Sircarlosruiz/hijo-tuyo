@@ -33,38 +33,38 @@ export function GroupSwitcher({ className }: GroupSwitcherProps): React.JSX.Elem
       </button>
 
       {open && (
-        <ul className="ht-group-switcher-dropdown" role="listbox">
-          {groups.map((group) => (
-            <li key={group.id} role="option" aria-selected={group.id === activeGroupId}>
-              <button
-                type="button"
-                className={`ht-group-switcher-item ${group.id === activeGroupId ? 'active' : ''}`}
-                onClick={() => {
-                  void setActiveGroup(group.id);
-                  setOpen(false);
-                }}
-              >
-                <span className="ht-group-switcher-item-name">{group.name}</span>
-                {group.myRole === 'owner' && (
-                  <span className="ht-group-switcher-owner-badge">Owner</span>
-                )}
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
+        <div className="ht-group-switcher-dropdown">
+          <ul className="ht-group-switcher-list" role="listbox" aria-label="Your groups">
+            {groups.map((group) => (
+              <li key={group.id} role="option" aria-selected={group.id === activeGroupId}>
+                <button
+                  type="button"
+                  className={`ht-group-switcher-item ${group.id === activeGroupId ? 'active' : ''}`}
+                  onClick={() => {
+                    void setActiveGroup(group.id);
+                    setOpen(false);
+                  }}
+                >
+                  <span className="ht-group-switcher-item-name">{group.name}</span>
+                  {group.myRole === 'owner' && (
+                    <span className="ht-group-switcher-owner-badge">Owner</span>
+                  )}
+                </button>
+              </li>
+            ))}
+          </ul>
 
-      {open && (
-        <div className="ht-group-switcher-footer">
-          <button
-            type="button"
-            className="ht-group-switcher-item ht-group-switcher-create"
-            onClick={() => {
-              window.location.href = '/groups/new';
-            }}
-          >
-            <span className="ht-group-switcher-item-name">+ Create new group</span>
-          </button>
+          <div className="ht-group-switcher-footer">
+            <button
+              type="button"
+              className="ht-group-switcher-item ht-group-switcher-create"
+              onClick={() => {
+                window.location.href = '/groups/new';
+              }}
+            >
+              <span className="ht-group-switcher-item-name">+ Create new group</span>
+            </button>
+          </div>
         </div>
       )}
     </div>
